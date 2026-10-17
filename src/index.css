@@ -1,0 +1,424 @@
+/* ── Self-hosted fonts via @fontsource ── */
+/* Public Sans: body copy, labels, UI text */
+@import "@fontsource/public-sans/400.css";
+@import "@fontsource/public-sans/500.css";
+@import "@fontsource/public-sans/600.css";
+@import "@fontsource/public-sans/700.css";
+
+/* Source Serif 4: headings weight 600 */
+@import "@fontsource/source-serif-4/600.css";
+
+/* ── Tailwind v4 entry point ── */
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   Registered in @theme so Tailwind generates utilities:
+   bg-forest, text-emerald, border-sage, etc.
+   ═══════════════════════════════════════════════════════════════ */
+@theme {
+  /* ── Palette ── */
+  --color-forest:       #073B35;
+  --color-emerald:      #0F806B;
+  --color-cream:        #F8F1E5;
+  --color-ivory:        #FFFDF8;
+  --color-sage:         #E5E9E5;
+  --color-charcoal:     #172522;
+  --color-amber:        #F4A340;
+  --color-text-secondary: #4A5A55;
+  --color-info:         #1F5FA6;
+  --color-danger:       #B3261E;
+
+  /* ── Semantic aliases (map to palette) ── */
+  --color-primary:      #073B35;
+  --color-secondary:    #0F806B;
+  --color-bg:           #F8F1E5;
+  --color-surface:      #FFFDF8;
+  --color-border:       #E5E9E5;
+  --color-text:         #172522;
+  --color-text-muted:   #4A5A55;
+  --color-warning:      #F4A340;
+
+  /* ── Hover variants ── */
+  --color-primary-hover:   #0a4f46;
+  --color-secondary-hover: #0a6557;
+
+  /* ── Neutral support ── */
+  --color-sage-strong: #C9D0CB;   /* scrollbar thumbs, hover borders */
+
+  /* ── Scrim + on-forest tints (consolidated from inline rgba literals) ── */
+  --color-scrim:        rgb(23 37 34 / 0.45);   /* modal overlays */
+  --color-on-forest-12: rgb(255 255 255 / 0.12);
+  --color-on-forest-08: rgb(255 255 255 / 0.08);
+  --focus-ring-emerald: 0 0 0 3px rgb(15 128 107 / 0.12);
+
+  /* ── Elevation (spec e1/e2/e3) ── */
+  --elevation-1: 0 1px 2px rgb(23 37 34 / 0.06);   /* resting surfaces */
+  --elevation-2: 0 4px 12px rgb(23 37 34 / 0.08);  /* hover, popovers */
+  --elevation-3: 0 12px 32px rgb(23 37 34 / 0.16); /* dialogs, drawers */
+
+  /* ── Shadows (legacy aliases now mapped to the elevation scale) ── */
+  --shadow-card: var(--elevation-1);
+  --shadow-md:   var(--elevation-2);
+  --shadow-lg:   var(--elevation-3);
+
+  /* ── Spacing scale (4-point) ── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* ── Type scale (size / line-height pairs) ── */
+  --text-xs:    13px;  --text-xs-lh:    18px;
+  --text-sm:    14px;  --text-sm-lh:    20px;
+  --text-base:  16px;  --text-base-lh:  24px;
+  --text-lg:    18px;  --text-lg-lh:    28px;
+  --text-xl:    20px;  --text-xl-lh:    28px;
+  --text-2xl:   24px;  --text-2xl-lh:   32px;
+  --text-3xl:   28px;  --text-3xl-lh:   36px;
+  --text-4xl:   32px;  --text-4xl-lh:   40px;
+  --text-5xl:   40px;  --text-5xl-lh:   48px;
+  --text-6xl:   48px;  --text-6xl-lh:   56px;
+
+  /* ── Motion (ease-out only, no scale or bounce) ── */
+  --motion-fast: 150ms;   /* color, border, shadow */
+  --motion-slow: 200ms;   /* drawers, dialogs */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* ── Border radius — no pill values ── */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  /* ── Font families ── */
+  --font-sans:  "Public Sans", system-ui, -apple-system, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE RESET AND ROOT
+   ═══════════════════════════════════════════════════════════════ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scrollbar-gutter: stable;           /* no layout shift when scrollbars appear */
+  scrollbar-width: thin;              /* Firefox thin scrollbars */
+  scrollbar-color: var(--color-sage-strong) transparent;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Paragraphs read better with pretty wrapping (no orphans). */
+p {
+  text-wrap: pretty;
+}
+
+/* Tabular figures for times, dates, IDs and counts. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Text selection — brand tint, never the browser default blue. */
+::selection {
+  background-color: #DCEFE9;
+  color: var(--color-charcoal);
+}
+
+/* One global focus-visible treatment: 3px emerald ring, 2px offset.
+   Elements on dark/forest surfaces opt into a white ring via .on-dark. */
+:focus-visible {
+  outline: 3px solid var(--color-emerald);
+  outline-offset: 2px;
+}
+.on-dark:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* Respect reduced-motion: drop animations and transitions globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Headings use Source Serif 4 at weight 600 */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-charcoal);
+}
+/* Balance the short headings so they break evenly. */
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+/* Links */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Images */
+img, svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* Remove default button styles */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+/* Remove default list styles */
+ul, ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar        { width: 8px; height: 8px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-sage-strong); border-radius: var(--radius-sm); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+
+/* ═══════════════════════════════════════════════════════════════
+   BUTTON VARIANTS
+   ═══════════════════════════════════════════════════════════════ */
+/* Shared base for every button variant. Fill stays fixed width while loading. */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-2) 1.125rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background-color var(--motion-fast) var(--ease-out),
+              border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out);
+}
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary { background-color: var(--color-forest); color: #ffffff; }
+.btn-primary:hover:not(:disabled)  { background-color: var(--color-primary-hover); }
+.btn-primary:active:not(:disabled) { background-color: #063029; }
+
+.btn-secondary {
+  background-color: var(--color-ivory);
+  color: var(--color-forest);
+  border-color: var(--color-forest);
+}
+.btn-secondary:hover:not(:disabled)  { background-color: var(--color-sage); }
+.btn-secondary:active:not(:disabled) { background-color: var(--color-sage-strong); }
+
+.btn-danger { background-color: var(--color-danger); color: #ffffff; }
+.btn-danger:hover:not(:disabled)  { background-color: #8c1e18; }
+.btn-danger:active:not(:disabled) { background-color: #751812; }
+
+/* Ghost: transparent until hover (toolbar / low-emphasis actions). */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background-color: transparent;
+  color: var(--color-forest);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+.btn-ghost:hover:not(:disabled)  { background-color: var(--color-sage); }
+.btn-ghost:active:not(:disabled) { background-color: var(--color-sage-strong); }
+.btn-ghost:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Accent: amber emphasis for a single primary call to action on dark surfaces. */
+.btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background-color: var(--color-amber);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-2) 1.125rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+.btn-accent:hover:not(:disabled)  { background-color: #e6962f; }
+.btn-accent:active:not(:disabled) { background-color: #d98a24; }
+.btn-accent:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Size modifiers (36 / 44 / 52px target heights). */
+.btn-sm { min-height: 36px; padding-top: 0; padding-bottom: 0; }
+.btn-md { min-height: 44px; padding-top: 0; padding-bottom: 0; }
+.btn-lg { min-height: 52px; padding-top: 0; padding-bottom: 0; font-size: var(--text-base); }
+
+/* Shared spinner used by any loading button/dialog (replaces 5 inline copies). */
+.spin { animation: ui-spin 0.8s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════════════════
+   FORM ELEMENTS
+   ═══════════════════════════════════════════════════════════════ */
+.input {
+  width: 100%;
+  background-color: var(--color-ivory);
+  border: 1.5px solid var(--color-sage);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--color-charcoal);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  line-height: 1.4;
+}
+.input:hover:not(:disabled):not(:focus) { border-color: var(--color-sage-strong); }
+.input:focus {
+  border-color: var(--color-emerald);
+  box-shadow: var(--focus-ring-emerald);
+}
+.input::placeholder { color: var(--color-text-muted); }
+.input:disabled {
+  background-color: var(--color-sage);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.input-label {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-charcoal);
+  margin-bottom: 0.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD SURFACE
+   ═══════════════════════════════════════════════════════════════ */
+.card {
+  background-color: var(--color-ivory);
+  border: 1px solid var(--color-sage);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+  padding: var(--space-5, 1.25rem);
+}
+
+/* Interactive card: clickable surfaces lift and brighten their border on hover,
+   and show the global focus ring on keyboard focus. */
+.card-interactive {
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out);
+}
+.card-interactive:hover {
+  border-color: var(--color-sage-strong);
+  box-shadow: var(--elevation-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS BADGES
+   Rounded corners only — no pill shape.
+   ═══════════════════════════════════════════════════════════════ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+}
+.badge-success  { background-color: #d1fae5; color: #065f46; }
+.badge-warning  { background-color: #fef3c7; color: #78350f; }
+.badge-danger   { background-color: #fce8e6; color: #7d1c18; }
+.badge-info     { background-color: #dbeafe; color: #1e3a5f; }
+.badge-pending  { background-color: #fff7ed; color: #7c3000; }
+.badge-default  { background-color: var(--color-sage); color: var(--color-charcoal); }
+
+/* ═══════════════════════════════════════════════════════════════
+   PAGE TYPOGRAPHY HELPERS
+   ═══════════════════════════════════════════════════════════════ */
+.page-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-3xl);
+  line-height: var(--text-3xl-lh);
+  font-weight: 600;
+  color: var(--color-charcoal);
+  text-wrap: balance;
+}
+.page-subtitle {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-lh);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
