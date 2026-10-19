@@ -46,40 +46,40 @@ export default function App() {
           <Route path="/calendar"             element={<CalendarPage />} />
           <Route path="/settings"             element={<Settings />} />
 
-          {/* Booking — all roles except reception */}
+          {/* Booking — all roles */}
           <Route path="/book" element={
-            <RequireRole allow={['requester','coordinator','authority','admin_dispatcher','super_admin']}>
+            <RequireRole allow={['requester','coordinator_authority','admin_dispatcher','super_admin']}>
               <BookAppointmentNew />
             </RequireRole>
           } />
           <Route path="/book/confirmation/:id" element={
-            <RequireRole allow={['requester','coordinator','authority','admin_dispatcher','super_admin']}>
+            <RequireRole allow={['requester','coordinator_authority','admin_dispatcher','super_admin']}>
               <BookingConfirmation />
             </RequireRole>
           } />
           <Route path="/book-appointment" element={
-            <RequireRole allow={['requester','coordinator','authority','admin_dispatcher','super_admin']}>
+            <RequireRole allow={['requester','coordinator_authority','admin_dispatcher','super_admin']}>
               <BookAppointment />
             </RequireRole>
           } />
 
-          {/* Approvals — coordinator, authority, admin dispatcher, super admin */}
+          {/* Approvals — coordinator/authority, admin dispatcher, super admin */}
           <Route path="/approvals" element={
-            <RequireRole allow={['coordinator','authority','admin_dispatcher','super_admin']}>
+            <RequireRole allow={['coordinator_authority','admin_dispatcher','super_admin']}>
               <Approvals />
             </RequireRole>
           } />
 
-          {/* Visitor management — reception, admin dispatcher, super admin */}
+          {/* Visitor management — admin dispatcher (reception desk), super admin */}
           <Route path="/visitor-management" element={
-            <RequireRole allow={['reception','admin_dispatcher','super_admin']}>
+            <RequireRole allow={['admin_dispatcher','super_admin']}>
               <VisitorManagement />
             </RequireRole>
           } />
 
-          {/* Reports — coordinator, authority, admin dispatcher, super admin */}
+          {/* Reports — coordinator/authority, admin dispatcher, super admin */}
           <Route path="/reports" element={
-            <RequireRole allow={['coordinator','authority','admin_dispatcher','super_admin']}>
+            <RequireRole allow={['coordinator_authority','admin_dispatcher','super_admin']}>
               <Reports />
             </RequireRole>
           } />

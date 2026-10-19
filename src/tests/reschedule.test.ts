@@ -15,10 +15,10 @@ import {
 import { __clearAudit } from '../data/auditLog'
 
 // ─── Stub actors ──────────────────────────────────────────────────────────────
-const authority: Actor   = { id: 'auth-ss', name: 'Prof. Sneha Shah', role: 'authority' }
+const authority: Actor    = { id: 'auth-ss', name: 'Prof. Sneha Shah', role: 'coordinator_authority' }
 const requester: Actor    = { id: 'u-req',   name: 'Requester',        role: 'requester' }
-const reception: Actor     = { id: 'u-rec',   name: 'Reception',        role: 'reception' }
-const coordinator: Actor  = { id: 'u-coo',   name: 'Coordinator',      role: 'coordinator' }
+const admin: Actor        = { id: 'u-adm',   name: 'Admin User',       role: 'admin_dispatcher' }
+const coordinator: Actor  = { id: 'u-ca',    name: 'Coordinator',      role: 'coordinator_authority' }
 
 // Known seed records (from approvalData.ts):
 const SUBMITTED      = 'APT-2026-2001'   // submitted
@@ -120,8 +120,8 @@ describe('provide additional information', () => {
 
 // ─── Mark not reported ────────────────────────────────────────────────────────
 describe('mark not reported', () => {
-  it('reception can mark a confirmed appointment as not reported', async () => {
-    const rec = await markNotReported(CONFIRMED, reception)
+  it('admin dispatcher can mark a confirmed appointment as not reported', async () => {
+    const rec = await markNotReported(CONFIRMED, admin)
     expect(rec.status).toBe('not-reported')
     expect(rec.assignedStage).toBe('Not reported')
   })
@@ -133,15 +133,15 @@ describe('mark not reported', () => {
   })
 
   it('not-reported is terminal: it cannot be marked again', async () => {
-    await markNotReported(CONFIRMED, reception)
+    await markNotReported(CONFIRMED, admin)
     const after = await fetchApproval(CONFIRMED)
     expect(after.status).toBe('not-reported')
     // Any further transition is illegal.
-    await expect(markNotReported(CONFIRMED, reception)).rejects.toThrow()
+    await expect(markNotReported(CONFIRMED, admin)).rejects.toThrow()
   })
 
   it('cannot mark a submitted request as not reported (illegal transition)', async () => {
-    await expect(markNotReported(SUBMITTED, reception)).rejects.toThrow()
+    await expect(markNotReported(SUBMITTED, admin)).rejects.toThrow()
   })
 })
 

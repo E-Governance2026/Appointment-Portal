@@ -114,11 +114,11 @@ const PEOPLE: { name: string; initials: string; id: string }[] = [
   { name: 'Kavya Reddy',  initials: 'KR', id: 'u-1105'  },
 ]
 const TYPES: { type: string; authority: string; initials: string; dept: string; purpose: string; role: Role }[] = [
-  { type: 'Academic',    authority: 'Prof. Sneha Shah',  initials: 'SS', dept: 'Academic Affairs', purpose: 'Academic discussion',   role: 'authority'   },
-  { type: 'Finance',     authority: 'Ms. Priya Desai',   initials: 'PD', dept: 'Finance',          purpose: 'Fee payment query',     role: 'coordinator' },
-  { type: 'HR',          authority: 'Dr. Amit Patel',    initials: 'AP', dept: 'Human Resources',  purpose: 'Leave clarification',   role: 'authority'   },
-  { type: 'Examination', authority: 'Prof. Neha Joshi',  initials: 'NJ', dept: 'Examination Cell', purpose: 'Re-evaluation request', role: 'authority'   },
-  { type: 'General',     authority: 'Mr. Vivek Mehta',   initials: 'VM', dept: 'Registrar',        purpose: 'Bonafide certificate',  role: 'authority'   },
+  { type: 'Academic',    authority: 'Prof. Sneha Shah',  initials: 'SS', dept: 'Academic Affairs', purpose: 'Academic discussion',   role: 'coordinator_authority' },
+  { type: 'Finance',     authority: 'Ms. Priya Desai',   initials: 'PD', dept: 'Finance',          purpose: 'Fee payment query',     role: 'coordinator_authority' },
+  { type: 'HR',          authority: 'Dr. Amit Patel',    initials: 'AP', dept: 'Human Resources',  purpose: 'Leave clarification',   role: 'coordinator_authority' },
+  { type: 'Examination', authority: 'Prof. Neha Joshi',  initials: 'NJ', dept: 'Examination Cell', purpose: 'Re-evaluation request', role: 'coordinator_authority' },
+  { type: 'General',     authority: 'Mr. Vivek Mehta',   initials: 'VM', dept: 'Registrar',        purpose: 'Bonafide certificate',  role: 'coordinator_authority' },
 ]
 const TIMES = ['09:00', '09:30', '10:00', '11:00', '14:00', '15:00', '16:00']
 const ALL_STATUSES: AppointmentStatus[] = [

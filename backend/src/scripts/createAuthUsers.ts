@@ -4,14 +4,14 @@ import { USERS } from '../seed/seedData.js'
 // ─── Create Supabase Auth users for the demo accounts ─────────────────────────
 // Uses the admin API (service role) to create one auth.users entry per demo
 // user, with a shared demo password, then links users.auth_user_id. Idempotent:
-// if an auth user already exists for the email, it reuses it. Only the 6 demo
+// if an auth user already exists for the email, it reuses it. Only the 4 demo
 // role accounts get credentials (the extra accounts are data-only for now).
 
 // Shared demo password for every demo account. NOT for production.
 const DEMO_PASSWORD = 'Portal@2026'
 
-// Which app users get login credentials (the 6 one-per-role demo accounts).
-const DEMO_IDS = ['u-req', 'u-coo', 'u-aut', 'u-adm', 'u-rec', 'u-sup']
+// Which app users get login credentials (the 4 one-per-role demo accounts).
+const DEMO_IDS = ['u-req', 'u-ca', 'u-adm', 'u-sup']
 
 async function findAuthUserByEmail(email: string): Promise<string | null> {
   const supabase = getSupabase()

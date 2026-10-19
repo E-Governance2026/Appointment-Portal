@@ -1,0 +1,188 @@
+import { Router, type Request, type Response, type NextFunction } from 'express'
+import { z } from 'zod'
+import { getSupabase } from '../lib/supabase.js'
+import { HttpError } from '../lib/httpError.js'
+import { requireAuth } from '../middleware/auth.js'
+import { requirePermission, requireCanView } from '../domain/guards.js'
+import { canViewAppointment } from '../domain/permissions.js'
+import { APPOINTMENT_COLUMNS, toAppointmentDto, type AppointmentRow } from './appointmentMapper.js'
+import { AUTHORITIES, BOOK_WITH_OPTIONS } from '../seed/seedData.js'
+import type { Actor } from '../types.js'
+
+// ─── Appointments routes ──────────────────────────────────────────────────────
+// Read endpoints (list + single) scoped by the same row-level visibility rule
+// the frontend uses (canViewAppointment), plus the 3-step booking submit.
+export const appointmentsRouter = Router()
+
+// ── Scoping ──
+// Pre-filter the query by role so we fetch only rows the actor could see, then
+// apply canViewAppointment per row as defense-in-depth (and to catch the
+// requester/own-id edge). Mirrors fetchApprovalQueue + canViewAppointment.
+// The PostgREST filter builder is generically typed; `query` is a chainable
+// builder whose exact type depends on the prior select, so we accept it loosely.
+function applyScope<Q extends { or(f: string): Q; eq(c: string, v: string): Q }>(
+  query: Q,
+  actor: Actor,
+): Q {
+  switch (actor.role) {
+    case 'super_admin':
+    case 'admin_dispatcher':
+      return query // see everything (admin also runs the reception desk)
+    case 'coordinator_authority':
+      // rows assigned to their role, or unassigned.
+      return query.or(`assigned_role.eq.${actor.role},assigned_role.is.null`)
+    case 'requester':
+    default:
+      return query.eq('requester_id', actor.id)
+  }
+}
+
+// GET /appointments — the list the actor may see.
+appointmentsRouter.get('/', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!
+    const supabase = getSupabase()
+
+    let query = supabase.from('appointments').select(APPOINTMENT_COLUMNS)
+    query = applyScope(query, actor)
+    const { data, error } = await query.order('submitted_at', { ascending: false })
+    if (error) throw new HttpError('internal_error', error.message)
+
+    const rows = (data ?? []) as unknown as AppointmentRow[]
+    // Defense-in-depth: re-check each row against the shared rule.
+    const visible = rows.filter(r =>
+      canViewAppointment(
+        { id: actor.id, name: actor.name, role: actor.role },
+        { requester: r.requester, requesterId: r.requester_id ?? undefined, assignedRole: r.assigned_role ?? undefined },
+      ),
+    )
+    res.json({ appointments: visible.map(toAppointmentDto) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /appointments/:id — a single appointment the actor may see.
+appointmentsRouter.get('/:id', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!
+    const supabase = getSupabase()
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .select(APPOINTMENT_COLUMNS)
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (error) throw new HttpError('internal_error', error.message)
+    if (!data) throw new HttpError('not_found', `Appointment ${req.params.id} not found.`)
+
+    const row = data as unknown as AppointmentRow
+    requireCanView(
+      { id: actor.id, name: actor.name, role: actor.role },
+      { requester: row.requester, requesterId: row.requester_id ?? undefined, assignedRole: row.assigned_role ?? undefined },
+    )
+    res.json({ appointment: toAppointmentDto(row) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ── Submit (3-step booking) ──
+// Step 1: appointment-with = one of BOOK_WITH_OPTIONS (Department / Shivendra
+//         sir / Jaimi sir) -> resolves to an authority.
+// Step 2: date + time, both OPTIONAL (the authority proposes a time at
+//         approval when left blank).
+// Step 3: subject + reason (description).
+// The appointment TYPE is DERIVED from the chosen authority, never picked by
+// the requester.
+export const submitSchema = z.object({
+  bookWith:    z.string().min(1, 'Choose who the appointment is with.'),
+  date:        z.string().trim().optional().default(''),
+  time:        z.string().trim().optional().default(''),
+  subject:     z.string().trim().min(1, 'Enter a subject.'),
+  description: z.string().trim().min(1, 'Describe the reason for the appointment.'),
+})
+
+// Resolve the step-1 choice to an authority record. Accepts either a
+// BOOK_WITH_OPTIONS key ('department' / 'auth-ss' / 'auth-ap') or a raw
+// authority id. Exported for unit testing.
+export function resolveAuthority(bookWith: string) {
+  const option = BOOK_WITH_OPTIONS.find(o => o.key === bookWith)
+  const authorityId = option ? option.authorityId : bookWith
+  const authority = AUTHORITIES.find(a => a.id === authorityId)
+  return authority ?? null
+}
+
+// A short random suffix keeps generated ids unique without a DB sequence.
+function nextAppointmentId(): string {
+  const n = Math.floor(1000 + Math.random() * 9000)
+  return `APT-2026-${n}`
+}
+
+appointmentsRouter.post('/', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.create')
+
+    const parsed = submitSchema.safeParse(req.body)
+    if (!parsed.success) {
+      throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'Invalid booking details.')
+    }
+    const { bookWith, date, time, subject, description } = parsed.data
+
+    const authority = resolveAuthority(bookWith)
+    if (!authority) {
+      throw new HttpError('validation', 'The selected authority is not available.')
+    }
+    if (!authority.active) {
+      throw new HttpError('validation', 'The selected authority is not currently accepting appointments.')
+    }
+
+    // Derive the type from the authority (first handled type). Never requester-
+    // chosen, per the 3-step flow.
+    const derivedTypeId = authority.typeIds[0] ?? null
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const initials = actor.name
+      .split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('')
+
+    const insertRow = {
+      id:                 nextAppointmentId(),
+      requester:          actor.name,
+      requester_id:       actor.id,
+      requester_initials: initials,
+      requester_category: 'Staff',
+      type_id:            derivedTypeId,
+      type_name:          '',
+      purpose_label:      '',
+      department:         authority.department,
+      authority_id:       authority.id,
+      authority_name:     authority.name,
+      date:               date.length > 0 ? date : null,
+      time:               time.length > 0 ? time : null,
+      subject,
+      description,
+      mode:               'physical' as const,
+      location_label:     '',
+      documents_count:    0,
+      status:             'submitted' as const,
+      submitted_at:       now,
+      assigned_stage:     'Authority review',
+      assigned_role:      'coordinator_authority' as const,
+      assigned_to_id:     authority.id,
+      updated_at:         now,
+    }
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .insert(insertRow)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    res.status(201).json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})

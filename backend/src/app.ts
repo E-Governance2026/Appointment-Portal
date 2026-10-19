@@ -3,6 +3,7 @@ import cors from 'cors'
 import { isSupabaseConfigured } from './config/env.js'
 import { HttpError } from './lib/httpError.js'
 import { authRouter } from './routes/auth.js'
+import { appointmentsRouter } from './routes/appointments.js'
 import './types.js'   // load the Express.Request augmentation
 
 // ─── Express app ──────────────────────────────────────────────────────────────
@@ -27,6 +28,9 @@ export function createApp() {
 
   // Auth: POST /auth/login, GET /auth/me
   app.use('/auth', authRouter)
+
+  // Appointments: GET /appointments, GET /appointments/:id, POST /appointments
+  app.use('/appointments', appointmentsRouter)
 
   // 404 for unknown routes.
   app.use((_req: Request, res: Response) => {

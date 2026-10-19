@@ -7,16 +7,14 @@ import type { Role } from '../types.js'
 export type { Role }
 
 export const ROLES: Role[] = [
-  'requester', 'coordinator', 'authority', 'admin_dispatcher', 'super_admin', 'reception',
+  'requester', 'coordinator_authority', 'admin_dispatcher', 'super_admin',
 ]
 
 export const ROLE_LABELS: Record<Role, string> = {
-  requester:        'Requester',
-  coordinator:      'Coordinator',
-  authority:        'Authority',
-  admin_dispatcher: 'Admin dispatcher',
-  reception:        'Reception',
-  super_admin:      'Super admin',
+  requester:             'Requester',
+  coordinator_authority: 'Coordinator / Authority',
+  admin_dispatcher:      'Admin dispatcher',
+  super_admin:           'Super admin',
 }
 
 // Every permission-gated capability (23 actions) — mirrors the frontend union.
@@ -55,18 +53,7 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'appointment.provideInfo',
     'calendar.view',
   ],
-  coordinator: [
-    'appointment.create',
-    'appointment.viewOwn',
-    'appointment.viewAssigned',
-    'appointment.requestInfo',
-    'appointment.proposeReschedule',
-    'appointment.forward',
-    'appointment.internalRemark',
-    'calendar.view',
-    'reports.view',
-  ],
-  authority: [
+  coordinator_authority: [
     'appointment.create',
     'appointment.viewOwn',
     'appointment.viewAssigned',
@@ -74,6 +61,7 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'appointment.reject',
     'appointment.requestInfo',
     'appointment.proposeReschedule',
+    'appointment.forward',
     'appointment.confirm',
     'appointment.cancel',
     'appointment.internalRemark',
@@ -94,14 +82,9 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'appointment.internalRemark',
     'calendar.view',
     'calendar.manageAny',
-    'reports.view',
-  ],
-  reception: [
-    'appointment.viewAssigned',
-    'appointment.markNotReported',
     'visitor.checkIn',
     'visitor.checkOut',
-    'calendar.view',
+    'reports.view',
   ],
   super_admin: [
     'appointment.viewAssigned',
@@ -150,10 +133,10 @@ export interface ViewableAppointment {
 
 export function canViewAppointment(user: ViewerLike | null | undefined, appt: ViewableAppointment): boolean {
   if (!user) return false
-  if (user.role === 'super_admin' || user.role === 'admin_dispatcher' || user.role === 'reception') {
+  if (user.role === 'super_admin' || user.role === 'admin_dispatcher') {
     return true
   }
-  if (user.role === 'authority' || user.role === 'coordinator') {
+  if (user.role === 'coordinator_authority') {
     return appt.assignedRole === undefined || appt.assignedRole === user.role
   }
   // requester: own records only

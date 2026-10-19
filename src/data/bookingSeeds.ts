@@ -5,14 +5,13 @@
 // ─── Role access ──────────────────────────────────────────────────────────────
 export const BOOKING_ALLOWED_ROLES = [
   'requester',
-  'coordinator',
-  'authority',
+  'coordinator_authority',
   'admin_dispatcher',
   'super_admin',
 ] as const
 
 export type BookingRole = typeof BOOKING_ALLOWED_ROLES[number]
-export type AnyRole = BookingRole | 'reception' | 'unknown'
+export type AnyRole = BookingRole | 'unknown'
 
 export function canBook(role: AnyRole): role is BookingRole {
   return (BOOKING_ALLOWED_ROLES as readonly string[]).includes(role)
@@ -63,7 +62,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'Academic',
     description: 'Course registration, academic grievances, study-related queries.',
     defaultDurationMinutes: 30,
-    eligibleRoles: ['requester','coordinator','authority','admin_dispatcher','super_admin'],
+    eligibleRoles: ['requester','coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: false,
     requiresPurpose: true,
     showParticipantCount: false,
@@ -76,7 +75,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'Finance',
     description: 'Fee queries, scholarship applications, payment disputes.',
     defaultDurationMinutes: 30,
-    eligibleRoles: ['requester','coordinator','admin_dispatcher','super_admin'],
+    eligibleRoles: ['requester','coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: false,
     requiresPurpose: true,
     showParticipantCount: false,
@@ -89,7 +88,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'HR',
     description: 'Leave queries, employee grievances, policy clarifications.',
     defaultDurationMinutes: 30,
-    eligibleRoles: ['requester','coordinator','authority','admin_dispatcher','super_admin'],
+    eligibleRoles: ['requester','coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: false,
     requiresPurpose: true,
     showParticipantCount: false,
@@ -102,7 +101,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'Admission',
     description: 'Document submission, eligibility queries, transfer certificates.',
     defaultDurationMinutes: 20,
-    eligibleRoles: ['requester','coordinator','admin_dispatcher','super_admin'],
+    eligibleRoles: ['requester','coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: false,
     requiresPurpose: true,
     showParticipantCount: false,
@@ -115,7 +114,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'Examination',
     description: 'Re-evaluation requests, hall ticket issues, result queries.',
     defaultDurationMinutes: 30,
-    eligibleRoles: ['requester','coordinator','admin_dispatcher','super_admin'],
+    eligibleRoles: ['requester','coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: true,
     requiresPurpose: true,
     showParticipantCount: false,
@@ -128,7 +127,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'General',
     description: 'Bonafide certificates, general enquiries, miscellaneous requests.',
     defaultDurationMinutes: 15,
-    eligibleRoles: ['requester','coordinator','authority','admin_dispatcher','super_admin'],
+    eligibleRoles: ['requester','coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: false,
     requiresPurpose: false,
     showParticipantCount: false,
@@ -141,7 +140,7 @@ export const APPOINTMENT_TYPES: AppointmentType[] = [
     name: 'Research',
     description: 'Research collaboration, funding queries, publication reviews.',
     defaultDurationMinutes: 45,
-    eligibleRoles: ['authority','coordinator','admin_dispatcher','super_admin'],
+    eligibleRoles: ['coordinator_authority','admin_dispatcher','super_admin'],
     autoAssign: false,
     requiresPurpose: true,
     showParticipantCount: true,

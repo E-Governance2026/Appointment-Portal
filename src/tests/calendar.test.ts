@@ -15,7 +15,7 @@ import {
 
 // ─── Stub actors ──────────────────────────────────────────────────────────────
 const superAdmin: Actor  = { id: 'u-sup', name: 'Super Admin',    role: 'super_admin' }
-const authority: Actor   = { id: 'auth-ss', name: 'Prof. Sneha Shah', role: 'authority' }
+const authority: Actor   = { id: 'auth-ss', name: 'Prof. Sneha Shah', role: 'coordinator_authority' }
 const requester: Actor   = { id: 'u-req', name: 'Requester',      role: 'requester' }
 
 // Today, used by the seed records.

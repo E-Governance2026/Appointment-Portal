@@ -15,8 +15,8 @@ import { __resetApprovals } from '../services/appointmentsService'
 import { __clearAudit } from '../data/auditLog'
 
 // ─── Stub actors ──────────────────────────────────────────────────────────────
-const authority: Actor   = { id: 'auth-ss', name: 'Prof. Sneha Shah', role: 'authority' }
-const coordinator: Actor = { id: 'u-coo',   name: 'Coordinator',      role: 'coordinator' }
+const authority: Actor   = { id: 'auth-ss', name: 'Prof. Sneha Shah', role: 'coordinator_authority' }
+const coordinator: Actor = { id: 'u-coo',   name: 'Coordinator',      role: 'coordinator_authority' }
 const requester: Actor   = { id: 'u-req',   name: 'Requester',        role: 'requester' }
 const superAdmin: Actor  = { id: 'u-sa',    name: 'Super Admin',      role: 'super_admin' }
 
@@ -124,13 +124,12 @@ describe('approvals service — permissions', () => {
     })
   })
 
-  it('a coordinator cannot approve (no final-approval permission)', async () => {
-    await expect(approveAppointment(SUBMITTED, coordinator)).rejects.toMatchObject({
-      code: 'forbidden',
-    })
+  it('a coordinator/authority CAN approve a request assigned to their role', async () => {
+    const rec = await approveAppointment(SUBMITTED, coordinator, { slot: { date: '2026-12-01', time: '10:00' } })
+    expect(rec.status).toBe('approved')
   })
 
-  it('a coordinator CAN request information', async () => {
+  it('a coordinator/authority CAN request information', async () => {
     const rec = await requestInfo(SUBMITTED, coordinator, 'Need more detail.')
     expect(rec.status).toBe('additional-info')
   })

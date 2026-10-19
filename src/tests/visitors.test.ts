@@ -12,7 +12,7 @@ import {
 import { __clearAudit } from '../data/auditLog'
 
 // ─── Stub actors ──────────────────────────────────────────────────────────────
-const reception: Actor  = { id: 'u-rec', name: 'Front Desk',   role: 'reception' }
+const admin: Actor  = { id: 'u-adm', name: 'Admin User', role: 'admin_dispatcher' }
 const requester: Actor   = { id: 'u-req', name: 'Requester',    role: 'requester' }
 
 // Known seed records (from approvalData.ts):
@@ -32,7 +32,7 @@ beforeEach(() => {
 // ─── Check-in ───────────────────────────────────────────────────────────────────
 describe('visitors — check-in', () => {
   it('sets checkedInAt and records a checked-in audit event, status stays confirmed', async () => {
-    const rec = await checkInVisitor(CONFIRMED, reception)
+    const rec = await checkInVisitor(CONFIRMED, admin)
     expect(rec.checkedInAt).toBeTruthy()
     expect(rec.status).toBe('confirmed')      // check-in is NOT a status change
     expect(rec.assignedStage).toBe('Checked in')
@@ -42,12 +42,12 @@ describe('visitors — check-in', () => {
   })
 
   it('blocks a duplicate check-in', async () => {
-    await checkInVisitor(CONFIRMED, reception)
-    await expect(checkInVisitor(CONFIRMED, reception)).rejects.toMatchObject({ code: 'duplicate' })
+    await checkInVisitor(CONFIRMED, admin)
+    await expect(checkInVisitor(CONFIRMED, admin)).rejects.toMatchObject({ code: 'duplicate' })
   })
 
   it('cannot check in an appointment that is not confirmed', async () => {
-    await expect(checkInVisitor(SUBMITTED, reception)).rejects.toBeInstanceOf(ServiceError)
+    await expect(checkInVisitor(SUBMITTED, admin)).rejects.toBeInstanceOf(ServiceError)
   })
 
   it('a requester cannot check a visitor in', async () => {
@@ -58,8 +58,8 @@ describe('visitors — check-in', () => {
 // ─── Check-out ────────────────────────────────────────────────────────────────
 describe('visitors — check-out', () => {
   it('completes the appointment and records a checked-out event', async () => {
-    await checkInVisitor(CONFIRMED, reception)
-    const rec = await checkOutVisitor(CONFIRMED, reception)
+    await checkInVisitor(CONFIRMED, admin)
+    const rec = await checkOutVisitor(CONFIRMED, admin)
     expect(rec.checkedOutAt).toBeTruthy()
     expect(rec.status).toBe('completed')      // check-out completes the visit
     expect(rec.assignedStage).toBe('Completed')
@@ -70,25 +70,25 @@ describe('visitors — check-out', () => {
   })
 
   it('cannot check out before checking in', async () => {
-    await expect(checkOutVisitor(CONFIRMED, reception)).rejects.toBeInstanceOf(ServiceError)
+    await expect(checkOutVisitor(CONFIRMED, admin)).rejects.toBeInstanceOf(ServiceError)
   })
 
   it('blocks a duplicate check-out', async () => {
-    await checkInVisitor(CONFIRMED, reception)
-    await checkOutVisitor(CONFIRMED, reception)
-    await expect(checkOutVisitor(CONFIRMED, reception)).rejects.toMatchObject({ code: 'duplicate' })
+    await checkInVisitor(CONFIRMED, admin)
+    await checkOutVisitor(CONFIRMED, admin)
+    await expect(checkOutVisitor(CONFIRMED, admin)).rejects.toMatchObject({ code: 'duplicate' })
   })
 
   it('a requester cannot check a visitor out', async () => {
-    await checkInVisitor(CONFIRMED, reception)
+    await checkInVisitor(CONFIRMED, admin)
     await expect(checkOutVisitor(CONFIRMED, requester)).rejects.toMatchObject({ code: 'forbidden' })
   })
 })
 
-// ─── Reception queue ──────────────────────────────────────────────────────────
-describe('visitors — reception queue', () => {
+// ─── admin queue ──────────────────────────────────────────────────────────
+describe('visitors — admin queue', () => {
   it("returns today's confirmed appointments ordered by time", async () => {
-    const q = await fetchReceptionQueue(reception, TODAY)
+    const q = await fetchReceptionQueue(admin, TODAY)
     expect(q.length).toBeGreaterThan(0)
     q.forEach(r => {
       expect(r.date).toBe(TODAY)
@@ -99,24 +99,24 @@ describe('visitors — reception queue', () => {
   })
 
   it('keeps a checked-out appointment in the queue as completed', async () => {
-    await checkInVisitor(CONFIRMED, reception)
-    await checkOutVisitor(CONFIRMED, reception)
-    const q = await fetchReceptionQueue(reception, TODAY)
+    await checkInVisitor(CONFIRMED, admin)
+    await checkOutVisitor(CONFIRMED, admin)
+    const q = await fetchReceptionQueue(admin, TODAY)
     const rec = q.find(r => r.id === CONFIRMED)
     expect(rec?.status).toBe('completed')
   })
 
-  it('a requester cannot read the reception queue', async () => {
+  it('a requester cannot read the admin queue', async () => {
     await expect(fetchReceptionQueue(requester, TODAY)).rejects.toMatchObject({ code: 'forbidden' })
   })
 
   it('an unrelated date returns an empty queue', async () => {
-    const q = await fetchReceptionQueue(reception, '1999-01-01')
+    const q = await fetchReceptionQueue(admin, '1999-01-01')
     expect(q).toEqual([])
   })
 
   it('does not mutate shared state across reads (returns copies)', async () => {
-    const q1 = await fetchReceptionQueue(reception, TODAY)
+    const q1 = await fetchReceptionQueue(admin, TODAY)
     q1.forEach(r => { r.subject = 'MUTATED' })
     const after = await fetchApproval(CONFIRMED)
     expect(after.subject).not.toBe('MUTATED')

@@ -37,10 +37,10 @@ export function seedUsers(): ManagedUser[] {
 
   // A few extra realistic accounts.
   const extras: ManagedUser[] = [
-    { id: 'u-1001', name: 'Prof. Sneha Shah',  email: 'sneha.shah@university.edu',  employeeId: 'PU-2016-052', department: 'Academic Affairs', role: 'authority',   active: true  },
-    { id: 'u-1002', name: 'Ms. Priya Desai',   email: 'priya.desai@university.edu', employeeId: 'PU-2018-077', department: 'Finance',          role: 'authority',   active: true  },
-    { id: 'u-1003', name: 'Rahul Nair',        email: 'rahul.nair@university.edu',  employeeId: 'PU-2021-210', department: 'Academic Affairs', role: 'coordinator', active: true  },
-    { id: 'u-1004', name: 'Anita Rao',         email: 'anita.rao@university.edu',   employeeId: 'PU-2020-188', department: 'Reception',        role: 'reception',   active: false },
+    { id: 'u-1001', name: 'Prof. Sneha Shah',  email: 'sneha.shah@university.edu',  employeeId: 'PU-2016-052', department: 'Academic Affairs', role: 'coordinator_authority', active: true  },
+    { id: 'u-1002', name: 'Ms. Priya Desai',   email: 'priya.desai@university.edu', employeeId: 'PU-2018-077', department: 'Finance',          role: 'coordinator_authority', active: true  },
+    { id: 'u-1003', name: 'Rahul Nair',        email: 'rahul.nair@university.edu',  employeeId: 'PU-2021-210', department: 'Academic Affairs', role: 'coordinator_authority', active: true  },
+    { id: 'u-1004', name: 'Anita Rao',         email: 'anita.rao@university.edu',   employeeId: 'PU-2020-188', department: 'MIS Department',   role: 'admin_dispatcher',      active: false },
   ]
 
   return [...demo, ...extras]

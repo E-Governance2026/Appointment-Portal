@@ -10,12 +10,10 @@ import Button from '../components/ui/Button'
 const features = { demoRoleSwitcher: import.meta.env.DEV === true }
 
 const DEMO_ROLE_OPTIONS: { label: string; role: Role }[] = [
-  { label: 'Requester',        role: 'requester'        },
-  { label: 'Coordinator',      role: 'coordinator'      },
-  { label: 'Authority',        role: 'authority'        },
-  { label: 'Admin dispatcher', role: 'admin_dispatcher' },
-  { label: 'Reception',        role: 'reception'        },
-  { label: 'Super admin',      role: 'super_admin'      },
+  { label: 'Requester',               role: 'requester'             },
+  { label: 'Coordinator / Authority', role: 'coordinator_authority' },
+  { label: 'Admin dispatcher',        role: 'admin_dispatcher'      },
+  { label: 'Super admin',             role: 'super_admin'           },
 ]
 
 function validateId(value: string): string {

@@ -1,13 +1,14 @@
 // ─── Shared backend types ─────────────────────────────────────────────────────
 
-// The 6 roles — mirrors the frontend's Role union (src/config/permissions.ts).
+// The 4 roles (PRD §3) — mirrors the frontend's Role union
+// (src/config/permissions.ts). coordinator_authority is the single
+// "Department Coordinator / Authority" role; the admin dispatcher runs the
+// reception desk, so there is no separate reception role.
 export type Role =
   | 'requester'
-  | 'coordinator'
-  | 'authority'
+  | 'coordinator_authority'
   | 'admin_dispatcher'
   | 'super_admin'
-  | 'reception'
 
 // The acting user the API trusts, resolved from a verified token. This is the
 // same shape the frontend service layer passes as `Actor`.

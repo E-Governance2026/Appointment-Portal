@@ -13,23 +13,23 @@ describe('permissions — hasPermission', () => {
     expect(hasPermission('requester', 'appointment.approve')).toBe(false)
   })
 
-  it('coordinator can request info and forward, but cannot approve', () => {
-    expect(hasPermission('coordinator', 'appointment.requestInfo')).toBe(true)
-    expect(hasPermission('coordinator', 'appointment.forward')).toBe(true)
-    expect(hasPermission('coordinator', 'appointment.approve')).toBe(false)
+  it('coordinator_authority can request info, forward, approve, reject and confirm', () => {
+    expect(hasPermission('coordinator_authority', 'appointment.requestInfo')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.forward')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.approve')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.reject')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.confirm')).toBe(true)
   })
 
-  it('authority can approve, reject and confirm', () => {
-    expect(hasPermission('authority', 'appointment.approve')).toBe(true)
-    expect(hasPermission('authority', 'appointment.reject')).toBe(true)
-    expect(hasPermission('authority', 'appointment.confirm')).toBe(true)
+  it('coordinator_authority cannot manage masters', () => {
+    expect(hasPermission('coordinator_authority', 'master.manage')).toBe(false)
   })
 
-  it('reception can check in and out, but cannot approve or manage masters', () => {
-    expect(hasPermission('reception', 'visitor.checkIn')).toBe(true)
-    expect(hasPermission('reception', 'visitor.checkOut')).toBe(true)
-    expect(hasPermission('reception', 'appointment.approve')).toBe(false)
-    expect(hasPermission('reception', 'master.manage')).toBe(false)
+  it('admin_dispatcher runs the reception desk (check in/out), cannot manage masters', () => {
+    expect(hasPermission('admin_dispatcher', 'visitor.checkIn')).toBe(true)
+    expect(hasPermission('admin_dispatcher', 'visitor.checkOut')).toBe(true)
+    expect(hasPermission('admin_dispatcher', 'appointment.approve')).toBe(true)
+    expect(hasPermission('admin_dispatcher', 'master.manage')).toBe(false)
   })
 
   it('super_admin can manage masters and users', () => {
@@ -49,16 +49,16 @@ describe('permissions — canAccessRoute', () => {
     ROLES.forEach(r => expect(canAccessRoute(r, '/dashboard')).toBe(true))
   })
 
-  it('reception cannot access the booking flow', () => {
-    expect(canAccessRoute('reception', '/book')).toBe(false)
+  it('requester can access the booking flow', () => {
+    expect(canAccessRoute('requester', '/book')).toBe(true)
   })
 
   it('requester cannot access approvals', () => {
     expect(canAccessRoute('requester', '/approvals')).toBe(false)
   })
 
-  it('authority can access approvals', () => {
-    expect(canAccessRoute('authority', '/approvals')).toBe(true)
+  it('coordinator_authority can access approvals', () => {
+    expect(canAccessRoute('coordinator_authority', '/approvals')).toBe(true)
   })
 
   it('only super_admin can access master and user management', () => {
@@ -69,8 +69,8 @@ describe('permissions — canAccessRoute', () => {
     })
   })
 
-  it('reception can access visitor management', () => {
-    expect(canAccessRoute('reception', '/visitor-management')).toBe(true)
+  it('admin_dispatcher can access visitor management', () => {
+    expect(canAccessRoute('admin_dispatcher', '/visitor-management')).toBe(true)
   })
 
   it('requester cannot access visitor management', () => {

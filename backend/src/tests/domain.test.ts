@@ -49,23 +49,23 @@ describe('domain — permissions', () => {
     expect(hasPermission('requester', 'appointment.approve')).toBe(false)
   })
 
-  it('coordinator can request info + forward, cannot approve', () => {
-    expect(hasPermission('coordinator', 'appointment.requestInfo')).toBe(true)
-    expect(hasPermission('coordinator', 'appointment.forward')).toBe(true)
-    expect(hasPermission('coordinator', 'appointment.approve')).toBe(false)
+  it('coordinator_authority can request info, forward, approve, reject, confirm', () => {
+    expect(hasPermission('coordinator_authority', 'appointment.requestInfo')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.forward')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.approve')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.reject')).toBe(true)
+    expect(hasPermission('coordinator_authority', 'appointment.confirm')).toBe(true)
   })
 
-  it('authority can approve, reject, confirm', () => {
-    expect(hasPermission('authority', 'appointment.approve')).toBe(true)
-    expect(hasPermission('authority', 'appointment.reject')).toBe(true)
-    expect(hasPermission('authority', 'appointment.confirm')).toBe(true)
+  it('coordinator_authority cannot manage masters or run reports.viewAll', () => {
+    expect(hasPermission('coordinator_authority', 'master.manage')).toBe(false)
+    expect(hasPermission('coordinator_authority', 'reports.viewAll')).toBe(false)
   })
 
-  it('reception can check in/out, cannot approve or manage masters', () => {
-    expect(hasPermission('reception', 'visitor.checkIn')).toBe(true)
-    expect(hasPermission('reception', 'visitor.checkOut')).toBe(true)
-    expect(hasPermission('reception', 'appointment.approve')).toBe(false)
-    expect(hasPermission('reception', 'master.manage')).toBe(false)
+  it('admin_dispatcher runs the reception desk (check in/out), cannot manage masters', () => {
+    expect(hasPermission('admin_dispatcher', 'visitor.checkIn')).toBe(true)
+    expect(hasPermission('admin_dispatcher', 'visitor.checkOut')).toBe(true)
+    expect(hasPermission('admin_dispatcher', 'master.manage')).toBe(false)
   })
 
   it('only super_admin can manage masters and users', () => {
@@ -79,7 +79,7 @@ describe('domain — permissions', () => {
 // ─── Row-level visibility parity ────────────────────────────────────────────
 describe('domain — canViewAppointment', () => {
   const requester = { id: 'u-req', name: 'Rohan Mehta', role: 'requester' as const }
-  const authority = { id: 'u-aut', name: 'Jaimi sir', role: 'authority' as const }
+  const coordinatorAuthority = { id: 'u-ca', name: 'Dr. Amit Patel', role: 'coordinator_authority' as const }
   const superAdmin = { id: 'u-sup', name: 'Super Admin', role: 'super_admin' as const }
 
   it('requester sees only their own rows', () => {
@@ -88,12 +88,12 @@ describe('domain — canViewAppointment', () => {
   })
 
   it('super_admin sees everything', () => {
-    expect(canViewAppointment(superAdmin, { requesterId: 'u-other', assignedRole: 'authority' })).toBe(true)
+    expect(canViewAppointment(superAdmin, { requesterId: 'u-other', assignedRole: 'coordinator_authority' })).toBe(true)
   })
 
-  it('authority sees rows assigned to the authority role only', () => {
-    expect(canViewAppointment(authority, { assignedRole: 'authority' })).toBe(true)
-    expect(canViewAppointment(authority, { assignedRole: 'coordinator' })).toBe(false)
+  it('coordinator_authority sees rows assigned to their role only', () => {
+    expect(canViewAppointment(coordinatorAuthority, { assignedRole: 'coordinator_authority' })).toBe(true)
+    expect(canViewAppointment(coordinatorAuthority, { assignedRole: 'admin_dispatcher' })).toBe(false)
   })
 
   it('no user → no access', () => {

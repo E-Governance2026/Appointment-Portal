@@ -34,12 +34,9 @@ function waitingLine(role: Role, n: number): string {
   switch (role) {
     case 'requester':
       return `${n} of your request${plural} ${n === 1 ? 'is' : 'are'} awaiting approval.`
-    case 'coordinator':
-    case 'authority':
+    case 'coordinator_authority':
     case 'admin_dispatcher':
       return `${n} request${plural} ${n === 1 ? 'is' : 'are'} waiting for your decision.`
-    case 'reception':
-      return `${n} visitor${plural} ${n === 1 ? 'is' : 'are'} expected today.`
     case 'super_admin':
       return `${n} request${plural} ${n === 1 ? 'is' : 'are'} waiting for approval across departments.`
     default:
@@ -56,11 +53,8 @@ export default function HeroBanner() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats()
   const { data: todayApts = [] } = useTodaysAppointments()
 
-  // Reception counts expected visitors (today's confirmed); everyone else counts
-  // what is awaiting approval in their scope.
-  const n = role === 'reception'
-    ? todayApts.filter(a => a.status === 'confirmed').length
-    : (stats?.awaitingApproval ?? 0)
+  // Everyone counts what is awaiting approval in their scope.
+  const n = stats?.awaitingApproval ?? 0
 
   // Next appointment later than now, confirmed or approved, in the viewer's scope.
   const now = new Date()
@@ -69,7 +63,7 @@ export default function HeroBanner() {
     .filter(a => (a.status === 'confirmed' || a.status === 'approved') && a.time > nowHHMM)
     .sort((a, b) => a.time.localeCompare(b.time))[0] ?? null
 
-  // Reception and staff care about the requester; a requester cares about the authority.
+  // Staff care about the requester; a requester cares about the authority.
   const nextPerson = role === 'requester' ? nextApt?.authority : nextApt?.requester
 
   return (

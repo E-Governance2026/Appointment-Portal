@@ -93,13 +93,12 @@ export async function fetchApprovalQueue(actor: Actor): Promise<ApprovalRecord[]
     throw new Error('Supabase implementation not wired yet.')
   }
   await delay(250)
-  // super_admin + admin_dispatcher see everything; others see items assigned to
-  // their role (and, for authority/coordinator, their own id).
+  // super_admin + admin_dispatcher see everything; coordinator_authority sees
+  // items assigned to their role.
   return STORE.filter(rec => {
     if (actor.role === 'super_admin' || actor.role === 'admin_dispatcher') return true
     if (rec.assignedRole !== actor.role) return false
-    // authority/coordinator only their own assignments
-    if (actor.role === 'authority' || actor.role === 'coordinator') {
+    if (actor.role === 'coordinator_authority') {
       return rec.assignedToId === actor.id || true // demo: show all of the role
     }
     return true
@@ -458,14 +457,13 @@ export async function fetchReceptionQueue(actor: Actor, date: string): Promise<A
 
 // ─── Calendar reads ───────────────────────────────────────────────────────────
 // Which appointments an actor may see on the calendar, same visibility rule as
-// the approval queue: super_admin/admin_dispatcher see all; authority/
-// coordinator/reception see those assigned to their role.
+// the approval queue: super_admin/admin_dispatcher see all (admin also runs the
+// reception desk); coordinator_authority sees those assigned to their role.
 function visibleTo(actor: Actor, rec: ApprovalRecord): boolean {
   if (actor.role === 'super_admin' || actor.role === 'admin_dispatcher') return true
-  if (actor.role === 'authority' || actor.role === 'coordinator') {
+  if (actor.role === 'coordinator_authority') {
     return rec.assignedRole === actor.role
   }
-  if (actor.role === 'reception') return true // reception sees all for the desk
   // requester: only their own
   return rec.requester === actor.name
 }

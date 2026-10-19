@@ -11,7 +11,7 @@ import {
 
 // ─── Stub actors ──────────────────────────────────────────────────────────────
 const superAdmin: Actor  = { id: 'u-sup', name: 'Super Admin', role: 'super_admin' }
-const authority: Actor    = { id: 'u-aut', name: 'Authority',  role: 'authority' }
+const authority: Actor    = { id: 'u-aut', name: 'Authority',  role: 'coordinator_authority' }
 
 beforeEach(() => {
   __resetApprovals()

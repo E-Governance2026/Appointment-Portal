@@ -69,20 +69,20 @@ export function workingHoursFor(authorityId: string) {
   return WORKING_HOURS_DEFAULT.map(w => ({ authority_id: authorityId, ...w }))
 }
 
-// Users: the 6 demo accounts (one per role, matching authStore DEMO_USERS) +
+// Users: the 4 demo accounts (one per role, matching authStore DEMO_USERS) +
 // a few extras. Emails follow the frontend's emailFor() convention.
+// coordinator_authority is the merged "Department Coordinator / Authority"
+// role; the admin dispatcher runs the reception desk, so no reception account.
 export const USERS = [
-  { id: 'u-req', name: 'Rohan Mehta',    email: 'rohan.mehta@university.edu',  employee_id: 'PU-2024-120', department: 'Academic Affairs', role: 'requester',        active: true },
-  { id: 'u-coo', name: 'Sneha Shah',     email: 'sneha.shah2@university.edu',  employee_id: 'PU-2019-044', department: 'Academic Affairs', role: 'coordinator',      active: true },
-  { id: 'u-aut', name: 'Dr. Amit Patel', email: 'dr.amit.patel@university.edu',employee_id: 'PU-2015-009', department: 'Human Resources',  role: 'authority',        active: true },
-  { id: 'u-adm', name: 'Admin User',     email: 'admin.user@university.edu',   employee_id: 'PU-2024-001', department: 'MIS Department',   role: 'admin_dispatcher', active: true },
-  { id: 'u-rec', name: 'Front Desk',     email: 'front.desk@university.edu',   employee_id: 'PU-2022-300', department: 'Reception',        role: 'reception',        active: true },
-  { id: 'u-sup', name: 'Super Admin',    email: 'super.admin@university.edu',  employee_id: 'PU-2010-000', department: 'MIS Department',   role: 'super_admin',      active: true },
+  { id: 'u-req', name: 'Rohan Mehta',    email: 'rohan.mehta@university.edu',  employee_id: 'PU-2024-120', department: 'Academic Affairs', role: 'requester',             active: true },
+  { id: 'u-ca',  name: 'Dr. Amit Patel', email: 'dr.amit.patel@university.edu',employee_id: 'PU-2015-009', department: 'Human Resources',  role: 'coordinator_authority', active: true },
+  { id: 'u-adm', name: 'Admin User',     email: 'admin.user@university.edu',   employee_id: 'PU-2024-001', department: 'MIS Department',   role: 'admin_dispatcher',      active: true },
+  { id: 'u-sup', name: 'Super Admin',    email: 'super.admin@university.edu',  employee_id: 'PU-2010-000', department: 'MIS Department',   role: 'super_admin',           active: true },
   // extras
-  { id: 'u-1001', name: 'Prof. Sneha Shah', email: 'sneha.shah@university.edu',  employee_id: 'PU-2016-052', department: 'Academic Affairs', role: 'authority',   active: true  },
-  { id: 'u-1002', name: 'Ms. Priya Desai',  email: 'priya.desai@university.edu', employee_id: 'PU-2018-077', department: 'Finance',          role: 'authority',   active: true  },
-  { id: 'u-1003', name: 'Rahul Nair',       email: 'rahul.nair@university.edu',  employee_id: 'PU-2021-210', department: 'Academic Affairs', role: 'coordinator', active: true  },
-  { id: 'u-1004', name: 'Anita Rao',        email: 'anita.rao@university.edu',   employee_id: 'PU-2020-188', department: 'Reception',        role: 'reception',   active: false },
+  { id: 'u-1001', name: 'Prof. Sneha Shah', email: 'sneha.shah@university.edu',  employee_id: 'PU-2016-052', department: 'Academic Affairs', role: 'coordinator_authority', active: true  },
+  { id: 'u-1002', name: 'Ms. Priya Desai',  email: 'priya.desai@university.edu', employee_id: 'PU-2018-077', department: 'Finance',          role: 'coordinator_authority', active: true  },
+  { id: 'u-1003', name: 'Rahul Nair',       email: 'rahul.nair@university.edu',  employee_id: 'PU-2021-210', department: 'Academic Affairs', role: 'coordinator_authority', active: true  },
+  { id: 'u-1004', name: 'Anita Rao',        email: 'anita.rao@university.edu',   employee_id: 'PU-2020-188', department: 'MIS Department',   role: 'admin_dispatcher',      active: false },
 ] as const
 
 // "Today" relative to the system clock, so the demo's today-records stay fresh.
@@ -117,7 +117,7 @@ export function appointments() {
       subject: 'Project supervision request',
       description: 'Requesting supervision for my final-year project.',
       status: 'submitted', submitted_at: `${TODAY}T08:50:00`,
-      assigned_stage: 'Authority review', assigned_role: 'authority', assigned_to_id: 'auth-ss',
+      assigned_stage: 'Authority review', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ss',
       updated_at: `${TODAY}T08:50:00` },
 
     // 2. Submitted to Jaimi sir, no time yet.
@@ -127,7 +127,7 @@ export function appointments() {
       subject: 'Leave policy clarification',
       description: 'Need clarification on the carry-forward leave policy.',
       status: 'submitted', submitted_at: `${TODAY}T07:40:00`,
-      assigned_stage: 'Authority review', assigned_role: 'authority', assigned_to_id: 'auth-ap',
+      assigned_stage: 'Authority review', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ap',
       updated_at: `${TODAY}T07:40:00` },
 
     // 3. General department request with a preferred time the requester chose.
@@ -137,7 +137,7 @@ export function appointments() {
       subject: 'Bonafide certificate',
       description: 'Requesting a bonafide certificate for a bank application.',
       status: 'submitted', submitted_at: `${TODAY}T06:15:00`,
-      assigned_stage: 'Authority review', assigned_role: 'authority', assigned_to_id: 'auth-vm',
+      assigned_stage: 'Authority review', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-vm',
       updated_at: `${TODAY}T06:15:00` },
 
     // 4. Approved — Shivendra sir provided a time; awaiting confirmation.
@@ -147,7 +147,7 @@ export function appointments() {
       subject: 'Elective selection guidance',
       description: 'Guidance on choosing electives for next semester.',
       status: 'approved', submitted_at: `${TODAY}T05:50:00`,
-      assigned_stage: 'Confirmation pending', assigned_role: 'authority', assigned_to_id: 'auth-ss',
+      assigned_stage: 'Confirmation pending', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ss',
       updated_at: `${TODAY}T10:00:00` },
 
     // 5. Confirmed — scheduled today with Jaimi sir.
@@ -157,7 +157,7 @@ export function appointments() {
       subject: 'Reimbursement query',
       description: 'Question about the travel reimbursement process.',
       status: 'confirmed', submitted_at: `${TODAY}T04:30:00`,
-      assigned_stage: 'Confirmed', assigned_role: 'authority', assigned_to_id: 'auth-ap',
+      assigned_stage: 'Confirmed', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ap',
       updated_at: `${TODAY}T11:20:00` },
 
     // 6. Additional information requested by the authority.
@@ -167,7 +167,7 @@ export function appointments() {
       subject: 'Transcript correction',
       description: 'A subject name is misspelled on my transcript.',
       status: 'additional-info', submitted_at: `${TODAY}T03:10:00`,
-      assigned_stage: 'Awaiting requester', assigned_role: 'authority', assigned_to_id: 'auth-ss',
+      assigned_stage: 'Awaiting requester', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ss',
       updated_at: `${TODAY}T09:10:00` },
 
     // 7. Completed (past) — a finished meeting with Jaimi sir.
@@ -177,7 +177,7 @@ export function appointments() {
       subject: 'Experience letter',
       description: 'Collected the experience letter.',
       status: 'completed', submitted_at: '2026-10-11T09:00:00',
-      assigned_stage: 'Completed', assigned_role: 'authority', assigned_to_id: 'auth-ap',
+      assigned_stage: 'Completed', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ap',
       updated_at: '2026-10-12T10:30:00' },
 
     // 8. Rejected (past) — out of scope.
@@ -187,7 +187,7 @@ export function appointments() {
       subject: 'Fee waiver request',
       description: 'Requesting a tuition fee waiver.',
       status: 'rejected', submitted_at: '2026-10-09T08:00:00',
-      assigned_stage: 'Rejected', assigned_role: 'authority', assigned_to_id: 'auth-ss',
+      assigned_stage: 'Rejected', assigned_role: 'coordinator_authority', assigned_to_id: 'auth-ss',
       updated_at: '2026-10-09T15:00:00' },
   ]
 }

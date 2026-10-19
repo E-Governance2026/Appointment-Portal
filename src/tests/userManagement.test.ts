@@ -9,7 +9,7 @@ import { seedUsers } from '../data/userData'
 // ─── Stub actors ──────────────────────────────────────────────────────────────
 // u-sup is the seeded super admin (from authStore DEMO_USERS).
 const superAdmin: Actor  = { id: 'u-sup', name: 'Super Admin', role: 'super_admin' }
-const authority: Actor    = { id: 'u-aut', name: 'Authority',  role: 'authority' }
+const authority: Actor    = { id: 'u-aut', name: 'Authority',  role: 'coordinator_authority' }
 
 beforeEach(() => {
   __resetUsers()
@@ -41,8 +41,8 @@ describe('user management — CRUD', () => {
     })
     expect(created.id).toBeTruthy()
 
-    const updated = await updateUser(superAdmin, { ...created, role: 'coordinator' })
-    expect(updated.role).toBe('coordinator')
+    const updated = await updateUser(superAdmin, { ...created, role: 'coordinator_authority' })
+    expect(updated.role).toBe('coordinator_authority')
 
     await deleteUser(superAdmin, created.id)
     const users = await fetchUsers(superAdmin)
@@ -51,7 +51,7 @@ describe('user management — CRUD', () => {
 
   it('can activate and deactivate a user', async () => {
     const created = await createUser(superAdmin, {
-      name: 'Toggle User', email: 'toggle@university.edu', employeeId: '', department: 'Finance', role: 'reception', active: true,
+      name: 'Toggle User', email: 'toggle@university.edu', employeeId: '', department: 'Finance', role: 'admin_dispatcher', active: true,
     })
     const off = await setUserActive(superAdmin, created.id, false)
     expect(off.active).toBe(false)
@@ -104,7 +104,7 @@ describe('user management — guards', () => {
   it('cannot demote the last super admin via update', async () => {
     await expect(updateUser(superAdmin, {
       id: 'u-sup', name: 'Super Admin', email: 'super.admin@university.edu',
-      employeeId: 'PU-2010-000', department: 'MIS Department', role: 'coordinator', active: true,
+      employeeId: 'PU-2010-000', department: 'MIS Department', role: 'coordinator_authority', active: true,
     })).rejects.toMatchObject({ code: 'in_use' })
   })
 
@@ -114,8 +114,8 @@ describe('user management — guards', () => {
     })
     const demoted = await updateUser(superAdmin, {
       id: 'u-sup', name: 'Super Admin', email: 'super.admin@university.edu',
-      employeeId: 'PU-2010-000', department: 'MIS Department', role: 'coordinator', active: true,
+      employeeId: 'PU-2010-000', department: 'MIS Department', role: 'coordinator_authority', active: true,
     })
-    expect(demoted.role).toBe('coordinator')
+    expect(demoted.role).toBe('coordinator_authority')
   })
 })

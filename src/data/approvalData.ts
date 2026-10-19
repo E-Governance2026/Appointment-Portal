@@ -64,7 +64,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'physical', locationLabel: 'Academic Block – Room 204', documentsCount: 1,
     status: 'submitted',
     submittedAt: `${TODAY}T08:05:00`,
-    assignedStage: 'Authority review', assignedRole: 'authority', assignedToId: 'auth-ss',
+    assignedStage: 'Authority review', assignedRole: 'coordinator_authority', assignedToId: 'auth-ss',
     updatedAt: `${TODAY}T08:05:00`,
   },
   {
@@ -80,7 +80,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'online', locationLabel: '', documentsCount: 2,
     status: 'submitted',
     submittedAt: `${TODAY}T07:40:00`,
-    assignedStage: 'Coordinator review', assignedRole: 'coordinator', assignedToId: 'u-coo',
+    assignedStage: 'Coordinator review', assignedRole: 'coordinator_authority', assignedToId: 'u-ca',
     updatedAt: `${TODAY}T07:40:00`,
   },
   {
@@ -96,7 +96,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'phone', locationLabel: '', documentsCount: 0,
     status: 'additional-info',
     submittedAt: `${TODAY}T06:15:00`,
-    assignedStage: 'Awaiting requester', assignedRole: 'authority', assignedToId: 'auth-ap',
+    assignedStage: 'Awaiting requester', assignedRole: 'coordinator_authority', assignedToId: 'auth-ap',
     updatedAt: `${TODAY}T09:10:00`,
   },
   {
@@ -112,7 +112,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'physical', locationLabel: 'Examination Cell Office', documentsCount: 1,
     status: 'approved',
     submittedAt: `${TODAY}T05:50:00`,
-    assignedStage: 'Confirmation pending', assignedRole: 'authority', assignedToId: 'auth-nj',
+    assignedStage: 'Confirmation pending', assignedRole: 'coordinator_authority', assignedToId: 'auth-nj',
     updatedAt: `${TODAY}T10:00:00`,
   },
   {
@@ -128,7 +128,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'physical', locationLabel: 'Registrar Office', documentsCount: 0,
     status: 'confirmed',
     submittedAt: `${TODAY}T04:30:00`,
-    assignedStage: 'Confirmed', assignedRole: 'authority', assignedToId: 'auth-vm',
+    assignedStage: 'Confirmed', assignedRole: 'coordinator_authority', assignedToId: 'auth-vm',
     updatedAt: `${TODAY}T11:20:00`,
   },
   {
@@ -144,7 +144,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'physical', locationLabel: 'Academic Block – Room 204', documentsCount: 3,
     status: 'submitted',
     submittedAt: `${TODAY}T08:50:00`,
-    assignedStage: 'Authority review', assignedRole: 'authority', assignedToId: 'auth-ss',
+    assignedStage: 'Authority review', assignedRole: 'coordinator_authority', assignedToId: 'auth-ss',
     updatedAt: `${TODAY}T08:50:00`,
   },
   {
@@ -160,7 +160,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'physical', locationLabel: 'Registrar Office', documentsCount: 2,
     status: 'completed',
     submittedAt: '2026-10-11T09:00:00',
-    assignedStage: 'Completed', assignedRole: 'authority', assignedToId: 'auth-vm',
+    assignedStage: 'Completed', assignedRole: 'coordinator_authority', assignedToId: 'auth-vm',
     updatedAt: '2026-10-12T12:00:00',
   },
   {
@@ -176,7 +176,7 @@ export const SEED_APPROVALS: ApprovalRecord[] = [
     mode: 'online', locationLabel: '', documentsCount: 0,
     status: 'rejected',
     submittedAt: '2026-10-09T08:00:00',
-    assignedStage: 'Rejected', assignedRole: 'authority', assignedToId: 'auth-ap',
+    assignedStage: 'Rejected', assignedRole: 'coordinator_authority', assignedToId: 'auth-ap',
     updatedAt: '2026-10-09T15:00:00',
   },
 ]

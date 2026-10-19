@@ -2,8 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { ShieldOff } from 'lucide-react'
 
 // ─── AccessDenied ─────────────────────────────────────────────────────────────
-// Shown when a role is not permitted to perform an action (e.g. reception
-// attempting to access the booking flow).
+// Shown when a role is not permitted to perform an action (e.g. a requester
+// attempting to open the approvals queue).
 
 export default function AccessDenied() {
   const navigate = useNavigate()

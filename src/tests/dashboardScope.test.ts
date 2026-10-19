@@ -39,16 +39,16 @@ describe('dashboard data scope — canViewAppointment', () => {
   })
 
   it('canViewAppointment blocks a requester from another requester row directly', () => {
-    const otherRow = { requester: 'Priya Sharma', requesterId: 'u-1101', assignedRole: 'authority' as const }
+    const otherRow = { requester: 'Priya Sharma', requesterId: 'u-1101', assignedRole: 'coordinator_authority' as const }
     expect(canViewAppointment(requester, otherRow)).toBe(false)
     expect(canViewAppointment(superAdmin, otherRow)).toBe(true)
   })
 
-  it('an authority sees rows assigned to the authority role, not arbitrary requesters', () => {
-    const authority: Viewer = { id: 'u-aut', name: 'Dr. Amit Patel', role: 'authority' }
-    const assignedToCoordinator = { requester: 'X', requesterId: 'u-x', assignedRole: 'coordinator' as const }
-    const assignedToAuthority   = { requester: 'Y', requesterId: 'u-y', assignedRole: 'authority' as const }
-    expect(canViewAppointment(authority, assignedToCoordinator)).toBe(false)
-    expect(canViewAppointment(authority, assignedToAuthority)).toBe(true)
+  it('coordinator_authority sees rows assigned to their role, not those assigned elsewhere', () => {
+    const staff: Viewer = { id: 'u-ca', name: 'Dr. Amit Patel', role: 'coordinator_authority' }
+    const assignedToAdmin = { requester: 'X', requesterId: 'u-x', assignedRole: 'admin_dispatcher' as const }
+    const assignedToSelf  = { requester: 'Y', requesterId: 'u-y', assignedRole: 'coordinator_authority' as const }
+    expect(canViewAppointment(staff, assignedToAdmin)).toBe(false)
+    expect(canViewAppointment(staff, assignedToSelf)).toBe(true)
   })
 })

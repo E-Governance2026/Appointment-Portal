@@ -13,7 +13,7 @@ import { toCsv, csvCell } from '../utils/csv'
 
 // ─── Stub actors ──────────────────────────────────────────────────────────────
 const superAdmin: Actor  = { id: 'u-sup', name: 'Super Admin',       role: 'super_admin' }
-const authority: Actor   = { id: 'u-aut', name: 'Prof. Sneha Shah',   role: 'authority' }
+const authority: Actor   = { id: 'u-aut', name: 'Prof. Sneha Shah',   role: 'coordinator_authority' }
 const requester: Actor    = { id: 'u-req', name: 'Requester',         role: 'requester' }
 
 const WIDE: ReportFilters = { from: '2000-01-01', to: '2100-12-31' }
@@ -57,7 +57,7 @@ describe('reports — computeReport (pure)', () => {
     const records = [{ ...SEED_APPROVALS[0], id: 'X', submittedAt, date: '2026-05-01' }]
     const events = [{
       id: 'e1', appointmentId: 'X', action: 'approved' as const,
-      actorId: 'a', actorName: 'A', actorRole: 'authority',
+      actorId: 'a', actorName: 'A', actorRole: 'coordinator_authority',
       summary: '', visibleToRequester: true, timestamp: decidedAt,
     }]
     const r = computeReport(records, events, WIDE)
@@ -97,11 +97,13 @@ describe('reports — service', () => {
     await expect(fetchReport(requester, WIDE)).rejects.toMatchObject({ code: 'forbidden' })
   })
 
-  it('authority (reports.view) is scoped to records assigned to their role', async () => {
+  it('coordinator_authority (reports.view) is scoped to records assigned to their role', async () => {
     const r = await fetchReport(authority, WIDE)
-    const expected = SEED_APPROVALS.filter(rec => rec.assignedRole === 'authority').length
+    // Scoping is by assigned_role: the report total equals the records assigned
+    // to coordinator_authority. (In the current seed every staff-assigned record
+    // belongs to this merged role, so the scope covers them all.)
+    const expected = SEED_APPROVALS.filter(rec => rec.assignedRole === 'coordinator_authority').length
     expect(r.total).toBe(expected)
-    expect(r.total).toBeLessThan(SEED_APPROVALS.length)
   })
 
   it('reflects a decision made during the session in the turnaround', async () => {

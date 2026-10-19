@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Menu, FileText, Bell, ClipboardList, History,
-  UserRound, Users, ShieldCheck, DoorOpen, Settings2,
+  UserRound, Users, ShieldCheck, Settings2,
 } from 'lucide-react'
 import Container from '../components/layout/Container'
 import Section from '../components/layout/Section'
@@ -33,11 +33,10 @@ const STEPS = [
 ]
 
 const ROLES_USING = [
-  { icon: <UserRound size={18} aria-hidden="true" />,  role: 'Requesters',    desc: 'Staff who submit and track appointment requests.' },
-  { icon: <Users size={18} aria-hidden="true" />,      role: 'Coordinators',  desc: 'Review requests and check that they are complete.' },
-  { icon: <ShieldCheck size={18} aria-hidden="true" />,role: 'Authorities',   desc: 'Approve requests and confirm appointments.' },
-  { icon: <DoorOpen size={18} aria-hidden="true" />,   role: 'Reception',     desc: 'Record visitor check-in and check-out.' },
-  { icon: <Settings2 size={18} aria-hidden="true" />,  role: 'Administrators',desc: 'Manage departments, authorities and approval rules.' },
+  { icon: <UserRound size={18} aria-hidden="true" />,   role: 'Requesters',            desc: 'Staff who submit and track appointment requests.' },
+  { icon: <ShieldCheck size={18} aria-hidden="true" />, role: 'Coordinators / Authorities', desc: 'Review requests, approve them and confirm appointments.' },
+  { icon: <Users size={18} aria-hidden="true" />,       role: 'Admin dispatchers',     desc: 'Act on assigned requests and record visitor check-in and check-out.' },
+  { icon: <Settings2 size={18} aria-hidden="true" />,   role: 'Administrators',        desc: 'Manage departments, authorities and approval rules.' },
 ]
 
 const CONTACT_ROWS = [

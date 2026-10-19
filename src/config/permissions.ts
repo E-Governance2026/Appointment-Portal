@@ -4,30 +4,27 @@
 // (PRD §10: "Do not rely solely on hiding frontend controls to enforce permissions").
 
 // ─── Roles (PRD §3) ────────────────────────────────────────────────────────────
+// The PRD defines four roles. "Department Coordinator / Authority" is a single
+// role (coordinator_authority); the admin dispatcher also handles the reception
+// desk (visitor check-in/out), so there is no separate reception role.
 export type Role =
   | 'requester'
-  | 'coordinator'
-  | 'authority'
+  | 'coordinator_authority'
   | 'admin_dispatcher'
   | 'super_admin'
-  | 'reception'
 
 export const ROLES: Role[] = [
   'requester',
-  'coordinator',
-  'authority',
+  'coordinator_authority',
   'admin_dispatcher',
   'super_admin',
-  'reception',
 ]
 
 export const ROLE_LABELS: Record<Role, string> = {
-  requester:        'Requester',
-  coordinator:      'Coordinator',
-  authority:        'Authority',
-  admin_dispatcher: 'Admin dispatcher',
-  reception:        'Reception',
-  super_admin:      'Super admin',
+  requester:             'Requester',
+  coordinator_authority: 'Coordinator / Authority',
+  admin_dispatcher:      'Admin dispatcher',
+  super_admin:           'Super admin',
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -54,7 +51,7 @@ export type Action =
   | 'calendar.view'
   | 'calendar.manageOwn'
   | 'calendar.manageAny'
-  // Reception
+  // Reception desk (handled by admin dispatcher)
   | 'visitor.checkIn'
   | 'visitor.checkOut'
   // Admin
@@ -75,21 +72,10 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'calendar.view',
   ],
 
-  // Coordinator: review, route, request info; no final approval unless assigned
-  coordinator: [
-    'appointment.create',
-    'appointment.viewOwn',
-    'appointment.viewAssigned',
-    'appointment.requestInfo',
-    'appointment.proposeReschedule',
-    'appointment.forward',
-    'appointment.internalRemark',
-    'calendar.view',
-    'reports.view',
-  ],
-
-  // Authority: approve/reject assigned requests, propose times, confirm, cancel
-  authority: [
+  // Coordinator / Authority: review assigned requests, request info, route, and
+  // approve/reject/confirm when assigned. The union of the old coordinator and
+  // authority capabilities (coordinator contributed 'forward').
+  coordinator_authority: [
     'appointment.create',
     'appointment.viewOwn',
     'appointment.viewAssigned',
@@ -97,6 +83,7 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'appointment.reject',
     'appointment.requestInfo',
     'appointment.proposeReschedule',
+    'appointment.forward',
     'appointment.confirm',
     'appointment.cancel',
     'appointment.internalRemark',
@@ -105,7 +92,8 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'reports.view',
   ],
 
-  // Admin dispatcher: acts on assigned requests in absence of someone
+  // Admin dispatcher: acts on assigned requests in absence of someone, and runs
+  // the reception desk (visitor check-in/out + mark no-shows).
   admin_dispatcher: [
     'appointment.viewAssigned',
     'appointment.approve',
@@ -119,16 +107,9 @@ const PERMISSIONS: Record<Role, Action[]> = {
     'appointment.internalRemark',
     'calendar.view',
     'calendar.manageAny',
-    'reports.view',
-  ],
-
-  // Reception: visitor check-in/out + mark no-shows as not reported
-  reception: [
-    'appointment.viewAssigned',
-    'appointment.markNotReported',
     'visitor.checkIn',
     'visitor.checkOut',
-    'calendar.view',
+    'reports.view',
   ],
 
   // Super admin: full administrative control
@@ -168,13 +149,13 @@ export function actionsFor(role: Role): Action[] {
 // Maps a nav route to the roles allowed to see it in the sidebar.
 export const NAV_ACCESS: Record<string, Role[]> = {
   '/dashboard':          ROLES,                                   // everyone
-  '/book':               ['requester','coordinator','authority','admin_dispatcher','super_admin'],
-  '/book-appointment':   ['requester','coordinator','authority','admin_dispatcher','super_admin'],
+  '/book':               ['requester','coordinator_authority','admin_dispatcher','super_admin'],
+  '/book-appointment':   ['requester','coordinator_authority','admin_dispatcher','super_admin'],
   '/my-appointments':    ROLES,
   '/calendar':           ROLES,
-  '/approvals':          ['coordinator','authority','admin_dispatcher','super_admin'],
-  '/visitor-management': ['reception','admin_dispatcher','super_admin'],
-  '/reports':            ['coordinator','authority','admin_dispatcher','super_admin'],
+  '/approvals':          ['coordinator_authority','admin_dispatcher','super_admin'],
+  '/visitor-management': ['admin_dispatcher','super_admin'],
+  '/reports':            ['coordinator_authority','admin_dispatcher','super_admin'],
   '/master-management':  ['super_admin'],
   '/user-management':    ['super_admin'],
   '/settings':           ROLES,
@@ -191,9 +172,9 @@ export function canAccessRoute(role: Role, route: string): boolean {
 // data layer and the service both apply it; the backend mirrors it with RLS.
 //
 // Rules:
-//  - super_admin / admin_dispatcher: every appointment.
-//  - reception: every appointment (front desk needs the full day).
-//  - authority / coordinator: appointments assigned to their role.
+//  - super_admin / admin_dispatcher: every appointment (admin also runs the
+//    reception desk, so it needs the full day).
+//  - coordinator_authority: appointments assigned to their role.
 //  - requester: only their own (matched by name in the mock; by id on the server).
 export interface ViewerLike {
   id?:   string
@@ -208,10 +189,10 @@ export interface ViewableAppointment {
 
 export function canViewAppointment(user: ViewerLike | null | undefined, appt: ViewableAppointment): boolean {
   if (!user) return false
-  if (user.role === 'super_admin' || user.role === 'admin_dispatcher' || user.role === 'reception') {
+  if (user.role === 'super_admin' || user.role === 'admin_dispatcher') {
     return true
   }
-  if (user.role === 'authority' || user.role === 'coordinator') {
+  if (user.role === 'coordinator_authority') {
     // Assigned rows; when an appointment carries no assignment (older mock
     // records) fall back to visible so staff dashboards are not empty.
     return appt.assignedRole === undefined || appt.assignedRole === user.role
