@@ -54,20 +54,26 @@ Through `src/services/appointmentsService.ts` (and the login flow):
 - Visitors: check-in, check-out.
 - Timeline + availability read/update, reports, master-data CRUD, user CRUD.
 - Booking submit (`POST /appointments`, 3-step flow with an idempotency key).
+- Dashboard: scoped counts (`GET /dashboard/stats`) and the today's/all lists.
+- My appointments + Appointment detail: live reads (`GET /appointments`,
+  `GET /appointments/:id`), scoped to the signed-in user.
+- Public tracking: `GET /track/:id` (no sign-in) for the Track screen.
 
 The full appointment lifecycle — book, review, request/provide info, approve,
-confirm, reschedule, cancel, check in/out, and no-show — now runs against the
+confirm, reschedule, cancel, check in/out, no-show — plus the dashboard,
+my-appointments, appointment detail, and public tracking now run against the
 backend, with every action recorded in the audit timeline.
 
-## What is still mock (deferred)
+## What is still mock
 
-These have no backend endpoint yet and keep serving demo data even when
-`VITE_DATA_SOURCE=supabase`:
+Only the retired booking wizard's reference reads remain on mock data, and the
+live 3-step booking flow does not use them:
 
-- Dashboard widgets (`useDashboard` / `mockAppointments`: today's list, all
-  appointments, dashboard stats).
-- Booking reference reads (appointment types, purposes, authority lists,
-  month/day slot availability, locations, document types, draft save/load,
-  document upload, next-available).
-- Static pages that render seed data directly: Track, My appointments,
-  Appointment detail.
+- Legacy 6-step booking reference reads in `src/data/bookingApi.ts` — appointment
+  types, purposes, authority-by-type lists, month/day slot availability,
+  locations, document types, draft save/load, document upload, next-available.
+  These served the earlier multi-step wizard (`src/components/booking/Step*`),
+  which the current 3-step `BookAppointmentNew` flow replaced. The live booking
+  path derives everything from the authority and submits through
+  `POST /appointments`, so these functions are unused in the shipped flow and
+  kept only as reference seeds.

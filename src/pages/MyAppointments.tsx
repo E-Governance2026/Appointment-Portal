@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, CalendarPlus, Eye, XCircle,
   Calendar, Clock, Building2, User, SlidersHorizontal, Upload,
 } from 'lucide-react'
 import StatusBadge from '../components/common/StatusBadge'
-import { SEED_APPOINTMENTS, type AppointmentRecord, type AppointmentStatus } from '../data/mockAppointments'
+import { SEED_APPOINTMENTS, fetchAllAppointments, type AppointmentRecord, type AppointmentStatus } from '../data/mockAppointments'
+
+// Under the real backend the list comes from GET /appointments (scoped to the
+// signed-in user); under mock it starts from the seed.
+const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
 
 // ─── Filter tabs ──────────────────────────────────────────────────────────────
 type FilterTab = 'all' | 'submitted' | 'approved' | 'confirmed' | 'completed' | 'cancelled'
@@ -180,7 +184,7 @@ function AppointmentCard({
 // ─── My Appointments page ─────────────────────────────────────────────────────
 export default function MyAppointments() {
   const navigate = useNavigate()
-  const [appointments, setAppointments] = useState<AppointmentRecord[]>(SEED_APPOINTMENTS)
+  const [appointments, setAppointments] = useState<AppointmentRecord[]>(USE_BACKEND ? [] : SEED_APPOINTMENTS)
   const [activeTab, setActiveTab]       = useState<FilterTab>('all')
   const [search, setSearch]             = useState('')
   const [dateFrom, setDateFrom]         = useState('')
@@ -189,6 +193,16 @@ export default function MyAppointments() {
   const [cancelId, setCancelId]         = useState<string | null>(null)
   const [infoId, setInfoId]             = useState<string | null>(null)
   const [infoText, setInfoText]         = useState('')
+
+  // Load the live list under the real backend (scoped to the signed-in user).
+  useEffect(() => {
+    if (!USE_BACKEND) return
+    let active = true
+    fetchAllAppointments()
+      .then(rows => { if (active) setAppointments(rows) })
+      .catch(() => { if (active) setAppointments([]) })
+    return () => { active = false }
+  }, [])
 
   // Filter
   const filtered = appointments.filter(appt => {

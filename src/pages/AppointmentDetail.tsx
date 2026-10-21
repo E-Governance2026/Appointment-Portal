@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Calendar, Clock, Building2, User,
   FileText, CheckCircle2, XCircle,
 } from 'lucide-react'
 import StatusBadge from '../components/common/StatusBadge'
-import { SEED_APPOINTMENTS, getStatusTimeline, type AppointmentRecord } from '../data/mockAppointments'
+import { SEED_APPOINTMENTS, getStatusTimeline, dtoToRecord, type AppointmentRecord } from '../data/mockAppointments'
+import { fetchApproval } from '../services/appointmentsService'
+
+// Under the real backend a single appointment is read from GET /appointments/:id.
+const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
 
 // ─── Info row helper ──────────────────────────────────────────────────────────
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -39,10 +43,31 @@ export default function AppointmentDetail() {
   const { id }   = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const [appointments, setAppointments] = useState<AppointmentRecord[]>(SEED_APPOINTMENTS)
+  const [appointments, setAppointments] = useState<AppointmentRecord[]>(USE_BACKEND ? [] : SEED_APPOINTMENTS)
   const [showCancel, setShowCancel]     = useState(false)
+  const [loading, setLoading]           = useState(USE_BACKEND)
+
+  // Under the real backend, load this one appointment by id.
+  useEffect(() => {
+    if (!USE_BACKEND || !id) return
+    let active = true
+    setLoading(true)
+    fetchApproval(id)
+      .then(dto => { if (active) setAppointments([dtoToRecord(dto)]) })
+      .catch(() => { if (active) setAppointments([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [id])
 
   const appt = appointments.find((a: AppointmentRecord) => a.id === id)
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '5rem 1rem' }}>
+        <p className="page-subtitle">Loading appointment…</p>
+      </div>
+    )
+  }
 
   if (!appt) {
     return (

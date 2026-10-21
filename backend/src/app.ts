@@ -10,6 +10,8 @@ import { availabilityRouter } from './routes/availability.js'
 import { reportsRouter } from './routes/reports.js'
 import { masterRouter } from './routes/master.js'
 import { usersRouter } from './routes/users.js'
+import { dashboardRouter } from './routes/dashboard.js'
+import { trackRouter } from './routes/track.js'
 import './types.js'   // load the Express.Request augmentation
 
 // ─── Express app ──────────────────────────────────────────────────────────────
@@ -73,6 +75,12 @@ export function createApp() {
 
   // User management (super admin): GET/POST/PUT/PATCH/DELETE /users
   app.use('/users', usersRouter)
+
+  // Dashboard: GET /dashboard/stats (scoped counts)
+  app.use('/dashboard', dashboardRouter)
+
+  // Public appointment tracking: GET /track/:id (no auth)
+  app.use('/track', trackRouter)
 
   // 404 for unknown routes.
   app.use((_req: Request, res: Response) => {

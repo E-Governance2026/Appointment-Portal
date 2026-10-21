@@ -3,6 +3,11 @@
 // "Upcoming", "checked-in", "waiting" are NOT PRD statuses and must not appear.
 import type { Role } from '../config/permissions'
 import { canViewAppointment } from '../config/permissions'
+import { api } from '../services/apiClient'
+
+// Which data source backs the dashboard reads (same flag the service uses).
+const DATA_SOURCE: 'mock' | 'supabase' =
+  (import.meta.env.VITE_DATA_SOURCE as 'mock' | 'supabase') ?? 'mock'
 
 export type AppointmentStatus =
   | 'draft'
@@ -401,13 +406,67 @@ function scope(records: AppointmentRecord[], viewer?: Viewer): AppointmentRecord
   return records.filter(a => canViewAppointment(viewer, a))
 }
 
+// ─── Backend DTO → AppointmentRecord adapter ──────────────────────────────────
+// The backend returns the richer camelCase appointment DTO (ApprovalRecord
+// shape). The dashboard components read the leaner AppointmentRecord, so map
+// one to the other. authorityInitials is derived from the name (the DTO has no
+// initials column).
+interface BackendAppointmentDto {
+  id: string
+  requester: string
+  requesterId?: string
+  requesterInitials?: string
+  typeName?: string
+  authorityName?: string
+  department?: string
+  purposeLabel?: string
+  subject?: string
+  date?: string
+  time?: string
+  status: AppointmentStatus
+  assignedRole?: Role
+  submittedAt?: string
+}
+
+function initialsOf(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+}
+
+export function dtoToRecord(d: BackendAppointmentDto): AppointmentRecord {
+  return {
+    id:                d.id,
+    date:              d.date ?? '',
+    time:              d.time ?? '',
+    requester:         d.requester,
+    requesterId:       d.requesterId,
+    requesterInitials: d.requesterInitials || initialsOf(d.requester),
+    appointmentType:   d.typeName ?? '',
+    authority:         d.authorityName ?? '',
+    authorityInitials: initialsOf(d.authorityName ?? ''),
+    department:        d.department ?? '',
+    purpose:           d.purposeLabel || d.subject || '',
+    status:            d.status,
+    assignedRole:      d.assignedRole,
+    createdAt:         d.submittedAt ?? '',
+  }
+}
+
 export async function fetchTodaysAppointments(viewer?: Viewer): Promise<AppointmentRecord[]> {
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ appointments: BackendAppointmentDto[] }>('/appointments')
+    const today = localISODate()
+    return res.appointments.map(dtoToRecord).filter(a => a.date === today)
+  }
   await delay(300)
   const today = localISODate()
   return scope(SEED_APPOINTMENTS.filter(a => a.date === today), viewer)
 }
 
 export async function fetchAllAppointments(viewer?: Viewer): Promise<AppointmentRecord[]> {
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ appointments: BackendAppointmentDto[] }>('/appointments')
+    return res.appointments.map(dtoToRecord)
+  }
   await delay(200)
   return scope(SEED_APPOINTMENTS, viewer)
 }
@@ -421,6 +480,10 @@ export interface DashboardStats {
 }
 
 export async function fetchDashboardStats(viewer?: Viewer): Promise<DashboardStats> {
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ stats: DashboardStats }>('/dashboard/stats')
+    return res.stats
+  }
   await delay(250)
   const all   = scope(SEED_APPOINTMENTS, viewer)
   const today = localISODate()

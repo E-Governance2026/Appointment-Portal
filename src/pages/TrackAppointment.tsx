@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { Search, ArrowLeft, CheckCircle2, Calendar, Clock, Building2, User } from 'lucide-react'
 import StatusBadge from '../components/common/StatusBadge'
 import Logo from '../components/ui/Logo'
-import { SEED_APPOINTMENTS, getStatusTimeline, type AppointmentRecord } from '../data/mockAppointments'
+import { SEED_APPOINTMENTS, getStatusTimeline, dtoToRecord, type AppointmentRecord } from '../data/mockAppointments'
+import { api } from '../services/apiClient'
+
+// Under the real backend, tracking uses the public GET /track/:id endpoint
+// (no sign-in required). Under mock it searches the seed by id.
+const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
 
 // ─── TrackAppointment Page ────────────────────────────────────────────────────
 export default function TrackAppointment() {
@@ -12,10 +17,21 @@ export default function TrackAppointment() {
   const [searched, setSearched] = useState(false)
   const [result, setResult] = useState<AppointmentRecord | null>(null)
 
-  function handleSearch() {
-    if (!inputId.trim()) return
+  async function handleSearch() {
+    const ref = inputId.trim()
+    if (!ref) return
+    if (USE_BACKEND) {
+      try {
+        const res = await api.get<{ appointment: Parameters<typeof dtoToRecord>[0] }>(`/track/${encodeURIComponent(ref)}`)
+        setResult(dtoToRecord(res.appointment))
+      } catch {
+        setResult(null)
+      }
+      setSearched(true)
+      return
+    }
     const found = SEED_APPOINTMENTS.find(
-      (a: AppointmentRecord) => a.id.toLowerCase() === inputId.trim().toLowerCase()
+      (a: AppointmentRecord) => a.id.toLowerCase() === ref.toLowerCase()
     )
     setResult(found ?? null)
     setSearched(true)
