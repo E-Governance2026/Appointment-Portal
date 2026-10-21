@@ -5,6 +5,7 @@ import { HttpError } from './lib/httpError.js'
 import { authRouter } from './routes/auth.js'
 import { appointmentsRouter } from './routes/appointments.js'
 import { availabilityRouter } from './routes/availability.js'
+import { reportsRouter } from './routes/reports.js'
 import './types.js'   // load the Express.Request augmentation
 
 // ─── Express app ──────────────────────────────────────────────────────────────
@@ -35,6 +36,9 @@ export function createApp() {
 
   // Availability: GET/PUT /availability/:authorityId
   app.use('/availability', availabilityRouter)
+
+  // Reports: GET /reports
+  app.use('/reports', reportsRouter)
 
   // 404 for unknown routes.
   app.use((_req: Request, res: Response) => {
