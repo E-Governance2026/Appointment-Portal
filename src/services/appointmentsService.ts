@@ -30,6 +30,7 @@ import {
   type ManagedUser,
 } from '../data/userData'
 import { ROLES } from '../config/permissions'
+import { api } from './apiClient'
 
 // ─── Config: which implementation backs this service ─────────────────────────
 // Flip to 'supabase' when the backend is wired. Only this module reads it.
@@ -63,13 +64,11 @@ export interface Actor {
 }
 
 // ─── Error type ─────────────────────────────────────────────────────────────────
-export type ServiceErrorCode = 'forbidden' | 'illegal_transition' | 'duplicate' | 'not_found' | 'validation' | 'in_use'
-
-export class ServiceError extends Error {
-  constructor(public code: ServiceErrorCode, message: string) {
-    super(message)
-  }
-}
+// Defined in ./serviceError and re-exported here so existing imports
+// (`import { ServiceError } from '../services/appointmentsService'`) keep working
+// and the API client can share the same type without an import cycle.
+export { ServiceError, type ServiceErrorCode } from './serviceError'
+import { ServiceError } from './serviceError'
 
 // ─── Guard helpers ──────────────────────────────────────────────────────────────
 function requirePermission(actor: Actor, action: Action) {
@@ -89,8 +88,9 @@ function find(id: string): ApprovalRecord {
 /** Queue of records this actor may act on, by their role + assignment. */
 export async function fetchApprovalQueue(actor: Actor): Promise<ApprovalRecord[]> {
   if (DATA_SOURCE === 'supabase') {
-    // TODO(backend): GET /appointments?assignedRole=... with RLS
-    throw new Error('Supabase implementation not wired yet.')
+    // The backend scopes the list by the signed-in actor (from the JWT).
+    const res = await api.get<{ appointments: ApprovalRecord[] }>('/appointments')
+    return res.appointments
   }
   await delay(250)
   // super_admin + admin_dispatcher see everything; coordinator_authority sees
@@ -106,12 +106,19 @@ export async function fetchApprovalQueue(actor: Actor): Promise<ApprovalRecord[]
 }
 
 export async function fetchApproval(id: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ appointment: ApprovalRecord }>(`/appointments/${id}`)
+    return res.appointment
+  }
   await delay(150)
   return { ...find(id) }
 }
 
 export async function fetchAppointmentTimeline(id: string): Promise<AuditEvent[]> {
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ timeline: AuditEvent[] }>(`/appointments/${id}/timeline`)
+    return res.timeline
+  }
   await delay(100)
   return getTimeline(id)
 }
@@ -159,7 +166,11 @@ export interface ApproveOptions {
 export async function approveAppointment(
   id: string, actor: Actor, opts: ApproveOptions | string = {},
 ): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const body = typeof opts === 'string' ? { note: opts } : opts
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/approve`, body)
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.approve')
   // Backward compatible: a bare string is treated as the note.
@@ -194,7 +205,10 @@ export async function approveAppointment(
 
 /** Reject a request. Reason is required (PRD §6.12). */
 export async function rejectAppointment(id: string, actor: Actor, reason: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/reject`, { reason })
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.reject')
   if (!reason.trim()) {
@@ -208,7 +222,10 @@ export async function rejectAppointment(id: string, actor: Actor, reason: string
 
 /** Request additional information from the requester. */
 export async function requestInfo(id: string, actor: Actor, message: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/request-info`, { message })
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.requestInfo')
   if (!message.trim()) {
@@ -227,7 +244,10 @@ export async function requestInfo(id: string, actor: Actor, message: string): Pr
  * email notification after approval + slot.
  */
 export async function confirmAppointment(id: string, actor: Actor): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/confirm`, {})
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.confirm')
   const rec = find(id)
@@ -251,7 +271,7 @@ export async function confirmAppointment(id: string, actor: Actor): Promise<Appr
 
 /** Forward to another role for approval (coordinator escalation). */
 export async function forwardForApproval(id: string, actor: Actor, toRole: Role): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Forwarding is not available on the server yet.')
   await delay(250)
   requirePermission(actor, 'appointment.forward')
   const rec = find(id)
@@ -268,7 +288,7 @@ export async function forwardForApproval(id: string, actor: Actor, toRole: Role)
 
 /** Add an internal remark — hidden from the requester. */
 export async function addInternalRemark(id: string, actor: Actor, text: string): Promise<AuditEvent> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Internal remarks are not available on the server yet.')
   await delay(200)
   requirePermission(actor, 'appointment.internalRemark')
   if (!text.trim()) throw new ServiceError('illegal_transition', 'Enter a remark.')
@@ -289,7 +309,7 @@ export async function addInternalRemark(id: string, actor: Actor, text: string):
 export async function proposeReschedule(
   id: string, actor: Actor, proposedDate: string, proposedTime: string, note?: string,
 ): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Rescheduling is not available on the server yet.')
   await delay(300)
   requirePermission(actor, 'appointment.proposeReschedule')
   if (!proposedDate || !proposedTime) {
@@ -312,7 +332,7 @@ export async function proposeReschedule(
 export async function respondReschedule(
   id: string, actor: Actor, decision: 'accept' | 'decline',
 ): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Responding to a reschedule is not available on the server yet.')
   await delay(300)
   requirePermission(actor, 'appointment.respondReschedule')
   const rec = find(id)
@@ -339,7 +359,7 @@ export async function respondReschedule(
  * non-terminal status the machine permits a cancel from.
  */
 export async function cancelAppointment(id: string, actor: Actor, reason: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Cancellation is not available on the server yet.')
   await delay(300)
   const action: Action = actor.role === 'requester' ? 'appointment.requestCancel' : 'appointment.cancel'
   requirePermission(actor, action)
@@ -357,7 +377,7 @@ export async function cancelAppointment(id: string, actor: Actor, reason: string
  * Moves additional-info → submitted so the request re-enters review.
  */
 export async function provideAdditionalInfo(id: string, actor: Actor, message: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Providing additional information is not available on the server yet.')
   await delay(300)
   requirePermission(actor, 'appointment.provideInfo')
   if (!message.trim()) {
@@ -377,7 +397,10 @@ export async function provideAdditionalInfo(id: string, actor: Actor, message: s
  * check-in (PRD §8 "Not reported"). Moves confirmed → not-reported.
  */
 export async function markNotReported(id: string, actor: Actor): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/not-reported`, {})
+    return res.appointment
+  }
   await delay(250)
   requirePermission(actor, 'appointment.markNotReported')
   const rec = find(id)
@@ -393,7 +416,10 @@ export async function markNotReported(id: string, actor: Actor): Promise<Approva
 
 /** Record the visitor's arrival. Appointment must be confirmed. */
 export async function checkInVisitor(id: string, actor: Actor): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/check-in`, {})
+    return res.appointment
+  }
   await delay(250)
   requirePermission(actor, 'visitor.checkIn')
   const rec = find(id)
@@ -416,7 +442,10 @@ export async function checkInVisitor(id: string, actor: Actor): Promise<Approval
 
 /** Record the visitor's departure and complete the appointment. */
 export async function checkOutVisitor(id: string, actor: Actor): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/check-out`, {})
+    return res.appointment
+  }
   await delay(250)
   requirePermission(actor, 'visitor.checkOut')
   const rec = find(id)
@@ -444,7 +473,10 @@ export async function checkOutVisitor(id: string, actor: Actor): Promise<Approva
  * Ordered by time. Requires the check-in capability.
  */
 export async function fetchReceptionQueue(actor: Actor, date: string): Promise<ApprovalRecord[]> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ queue: ApprovalRecord[] }>(`/appointments/reception/queue?date=${encodeURIComponent(date)}`)
+    return res.queue
+  }
   await delay(200)
   requirePermission(actor, 'visitor.checkIn')
   return STORE
@@ -472,7 +504,11 @@ function visibleTo(actor: Actor, rec: ApprovalRecord): boolean {
 export async function fetchCalendarAppointments(
   actor: Actor, range: { from: string; to: string },
 ): Promise<ApprovalRecord[]> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ appointments: ApprovalRecord[] }>(
+      `/appointments/calendar?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`)
+    return res.appointments
+  }
   await delay(200)
   return STORE
     .filter(rec => visibleTo(actor, rec))
@@ -482,7 +518,10 @@ export async function fetchCalendarAppointments(
 
 /** Appointments on a single day, ordered by time. */
 export async function fetchDayAppointments(actor: Actor, date: string): Promise<ApprovalRecord[]> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ appointments: ApprovalRecord[] }>(`/appointments/day?date=${encodeURIComponent(date)}`)
+    return res.appointments
+  }
   await delay(150)
   return STORE
     .filter(rec => visibleTo(actor, rec))
@@ -494,7 +533,10 @@ export async function fetchDayAppointments(actor: Actor, date: string): Promise<
 // ─── Availability reads / writes ──────────────────────────────────────────────
 /** Read the availability config for an authority (defaults to the actor). */
 export async function fetchAvailability(authorityId: string): Promise<Availability | undefined> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ availability: Availability }>(`/availability/${encodeURIComponent(authorityId)}`)
+    return res.availability
+  }
   await delay(150)
   const av = AVAILABILITY_STORE.find(a => a.authorityId === authorityId)
   if (!av) return undefined
@@ -511,7 +553,14 @@ export async function fetchAvailability(authorityId: string): Promise<Availabili
  * (calendar.manageAny).
  */
 export async function updateAvailability(actor: Actor, next: Availability): Promise<Availability> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.put<{ availability: Availability }>(`/availability/${encodeURIComponent(next.authorityId)}`, {
+      slotMinutes:  next.slotMinutes,
+      workingHours: next.workingHours,
+      holidays:     next.holidays,
+    })
+    return res.availability
+  }
   await delay(250)
 
   const canManageAny = hasPermission(actor.role, 'calendar.manageAny')
@@ -548,7 +597,14 @@ export async function updateAvailability(actor: Actor, next: Availability): Prom
  * actor's role (own scope). Requesters have no reporting permission.
  */
 export async function fetchReport(actor: Actor, filters: ReportFilters): Promise<ReportSummary> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const q = new URLSearchParams({ from: filters.from, to: filters.to })
+    if (filters.department)  q.set('department', filters.department)
+    if (filters.authorityId) q.set('authorityId', filters.authorityId)
+    if (filters.status)      q.set('status', filters.status)
+    const res = await api.get<{ report: ReportSummary }>(`/reports?${q.toString()}`)
+    return res.report
+  }
   await delay(250)
 
   const canAll = hasPermission(actor.role, 'reports.viewAll')
@@ -584,7 +640,10 @@ function cloneMaster(): MasterData {
 
 /** Read all master data. Requires master.manage. */
 export async function fetchMasterData(actor: Actor): Promise<MasterData> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ master: MasterData }>('/master')
+    return res.master
+  }
   await delay(200)
   requireMaster(actor)
   return cloneMaster()
@@ -604,7 +663,10 @@ export function activeAuthorityIds(): Set<string> {
 
 // ── Departments ──
 export async function createDepartment(actor: Actor, input: Omit<Department, 'id'>): Promise<Department> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ department: Department }>('/master/departments', input)
+    return res.department
+  }
   await delay(200)
   requireMaster(actor)
   if (!isNonEmpty(input.name)) throw new ServiceError('validation', 'Department name is required.')
@@ -618,7 +680,10 @@ export async function createDepartment(actor: Actor, input: Omit<Department, 'id
 }
 
 export async function updateDepartment(actor: Actor, dept: Department): Promise<Department> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.put<{ department: Department }>(`/master/departments/${encodeURIComponent(dept.id)}`, dept)
+    return res.department
+  }
   await delay(200)
   requireMaster(actor)
   if (!isNonEmpty(dept.name)) throw new ServiceError('validation', 'Department name is required.')
@@ -632,7 +697,10 @@ export async function updateDepartment(actor: Actor, dept: Department): Promise<
 }
 
 export async function deleteDepartment(actor: Actor, id: string): Promise<void> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    await api.del<void>(`/master/departments/${encodeURIComponent(id)}`)
+    return
+  }
   await delay(200)
   requireMaster(actor)
   const dept = MASTER.departments.find(d => d.id === id)
@@ -646,7 +714,10 @@ export async function deleteDepartment(actor: Actor, id: string): Promise<void> 
 
 // ── Appointment types ──
 export async function createAppointmentType(actor: Actor, input: Omit<MasterAppointmentType, 'id'>): Promise<MasterAppointmentType> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ type: MasterAppointmentType }>('/master/types', input)
+    return res.type
+  }
   await delay(200)
   requireMaster(actor)
   if (!isNonEmpty(input.name)) throw new ServiceError('validation', 'Type name is required.')
@@ -660,7 +731,10 @@ export async function createAppointmentType(actor: Actor, input: Omit<MasterAppo
 }
 
 export async function updateAppointmentType(actor: Actor, type: MasterAppointmentType): Promise<MasterAppointmentType> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.put<{ type: MasterAppointmentType }>(`/master/types/${encodeURIComponent(type.id)}`, type)
+    return res.type
+  }
   await delay(200)
   requireMaster(actor)
   if (!isNonEmpty(type.name)) throw new ServiceError('validation', 'Type name is required.')
@@ -675,7 +749,10 @@ export async function updateAppointmentType(actor: Actor, type: MasterAppointmen
 }
 
 export async function deleteAppointmentType(actor: Actor, id: string): Promise<void> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    await api.del<void>(`/master/types/${encodeURIComponent(id)}`)
+    return
+  }
   await delay(200)
   requireMaster(actor)
   const type = MASTER.types.find(t => t.id === id)
@@ -689,7 +766,10 @@ export async function deleteAppointmentType(actor: Actor, id: string): Promise<v
 
 // ── Authorities ──
 export async function createAuthority(actor: Actor, input: Omit<MasterAuthority, 'id'>): Promise<MasterAuthority> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ authority: MasterAuthority }>('/master/authorities', input)
+    return res.authority
+  }
   await delay(200)
   requireMaster(actor)
   if (!isNonEmpty(input.name)) throw new ServiceError('validation', 'Authority name is required.')
@@ -703,7 +783,10 @@ export async function createAuthority(actor: Actor, input: Omit<MasterAuthority,
 }
 
 export async function updateAuthority(actor: Actor, auth: MasterAuthority): Promise<MasterAuthority> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.put<{ authority: MasterAuthority }>(`/master/authorities/${encodeURIComponent(auth.id)}`, auth)
+    return res.authority
+  }
   await delay(200)
   requireMaster(actor)
   if (!isNonEmpty(auth.name)) throw new ServiceError('validation', 'Authority name is required.')
@@ -718,7 +801,10 @@ export async function updateAuthority(actor: Actor, auth: MasterAuthority): Prom
 }
 
 export async function deleteAuthority(actor: Actor, id: string): Promise<void> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    await api.del<void>(`/master/authorities/${encodeURIComponent(id)}`)
+    return
+  }
   await delay(200)
   requireMaster(actor)
   const auth = MASTER.authorities.find(a => a.id === id)
@@ -741,7 +827,10 @@ function countActiveSuperAdmins(excludeId?: string): number {
 
 /** Read all user accounts. Requires user.manage. */
 export async function fetchUsers(actor: Actor): Promise<ManagedUser[]> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.get<{ users: ManagedUser[] }>('/users')
+    return res.users
+  }
   await delay(200)
   requireUserAdmin(actor)
   return USERS.map(u => ({ ...u }))
@@ -757,7 +846,10 @@ function validateUser(input: Omit<ManagedUser, 'id'>, excludeId?: string) {
 }
 
 export async function createUser(actor: Actor, input: Omit<ManagedUser, 'id'>): Promise<ManagedUser> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ user: ManagedUser }>('/users', input)
+    return res.user
+  }
   await delay(250)
   requireUserAdmin(actor)
   validateUser(input)
@@ -772,7 +864,10 @@ export async function createUser(actor: Actor, input: Omit<ManagedUser, 'id'>): 
 }
 
 export async function updateUser(actor: Actor, user: ManagedUser): Promise<ManagedUser> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.put<{ user: ManagedUser }>(`/users/${encodeURIComponent(user.id)}`, user)
+    return res.user
+  }
   await delay(250)
   requireUserAdmin(actor)
   const idx = USERS.findIndex(u => u.id === user.id)
@@ -792,7 +887,10 @@ export async function updateUser(actor: Actor, user: ManagedUser): Promise<Manag
 }
 
 export async function setUserActive(actor: Actor, id: string, active: boolean): Promise<ManagedUser> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.patch<{ user: ManagedUser }>(`/users/${encodeURIComponent(id)}/active`, { active })
+    return res.user
+  }
   await delay(200)
   requireUserAdmin(actor)
   const user = USERS.find(u => u.id === id)
@@ -808,7 +906,10 @@ export async function setUserActive(actor: Actor, id: string, active: boolean): 
 }
 
 export async function deleteUser(actor: Actor, id: string): Promise<void> {
-  if (DATA_SOURCE === 'supabase') throw new Error('Supabase implementation not wired yet.')
+  if (DATA_SOURCE === 'supabase') {
+    await api.del<void>(`/users/${encodeURIComponent(id)}`)
+    return
+  }
   await delay(250)
   requireUserAdmin(actor)
   const user = USERS.find(u => u.id === id)

@@ -5,6 +5,24 @@ import {
   type Role,
   type Action,
 } from '../config/permissions'
+import { api, setToken } from '../services/apiClient'
+
+// Whether real auth is active. Under 'mock' the demo switcher drives login; under
+// 'supabase' the Login form calls the backend.
+const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
+
+// The actor shape returned by POST /auth/login and GET /auth/me.
+interface ApiActor { id: string; name: string; role: Role; email?: string }
+
+function actorToUser(a: ApiActor): AuthUser {
+  return {
+    id:         a.id,
+    name:       a.name,
+    employeeId: '',
+    department: '',
+    role:       a.role,
+  }
+}
 
 // ─── Auth user ────────────────────────────────────────────────────────────────
 export interface AuthUser {
@@ -48,6 +66,8 @@ interface AuthState {
   user: AuthUser | null
   // Actions
   loginAs:  (role: Role) => void
+  /** Real backend login (email + password). Stores token + actor. */
+  login:    (email: string, password: string) => Promise<void>
   logout:   () => void
   // Selectors
   can:          (action: Action) => boolean
@@ -55,9 +75,9 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  // Default to admin_dispatcher so the existing dashboard keeps working until
-  // the user logs in with a specific role.
-  user: loadPersisted() ?? DEMO_USERS.admin_dispatcher,
+  // Under mock, default to admin_dispatcher so the dashboard works before login.
+  // Under the real backend, start signed-out so the Login screen is required.
+  user: USE_BACKEND ? loadPersisted() : (loadPersisted() ?? DEMO_USERS.admin_dispatcher),
 
   loginAs: (role) => {
     const user = DEMO_USERS[role]
@@ -65,7 +85,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user })
   },
 
+  login: async (email, password) => {
+    const res = await api.post<{ token: string; actor: ApiActor }>('/auth/login', { email, password })
+    setToken(res.token)
+    const user = actorToUser(res.actor)
+    persist(user)
+    set({ user })
+  },
+
   logout: () => {
+    setToken(null)
     persist(null)
     set({ user: null })
   },

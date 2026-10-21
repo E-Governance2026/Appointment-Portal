@@ -21,6 +21,31 @@ import {
 } from './bookingSeeds'
 
 import { activeTypeIds, activeAuthorityIds } from '../services/appointmentsService'
+import { api } from '../services/apiClient'
+
+// Which data source backs the booking submit (same flag the service uses).
+const DATA_SOURCE: 'mock' | 'supabase' =
+  (import.meta.env.VITE_DATA_SOURCE as 'mock' | 'supabase') ?? 'mock'
+
+// The subset of the backend appointment DTO the booking submit reads back.
+interface BackendAppointment {
+  id: string
+  typeId: string
+  typeName: string
+  purposeLabel: string
+  authorityId: string
+  authorityName: string
+  department: string
+  date: string
+  time: string
+  subject: string
+  description: string
+  mode: MeetingMode
+  locationLabel: string
+  requester: string
+  requesterId?: string
+  submittedAt: string
+}
 
 // Re-export for convenience
 export type { AppointmentType, Purpose, Authority, Location, RequiredDocType }
@@ -434,6 +459,47 @@ export async function submitAppointment(
   draft: BookingDraft,
   idempotencyKey: string,
 ): Promise<SubmittedAppointment> {
+  if (DATA_SOURCE === 'supabase') {
+    // The backend's 3-step submit: bookWith (authority id) + optional slot +
+    // subject + description. It derives the type from the authority and the
+    // requester identity from the token. Returns an appointment DTO which we
+    // map to the SubmittedAppointment shape the confirmation screen reads.
+    const res = await api.post<{ appointment: BackendAppointment }>(
+      '/appointments',
+      { bookWith: draft.authorityId, date: draft.date, time: draft.time, subject: draft.subject, description: draft.description },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
+    const a = res.appointment
+    return {
+      id: a.id,
+      draftId: draft.id,
+      status: 'submitted',
+      typeId: a.typeId,
+      typeName: a.typeName,
+      purposeId: '',
+      purposeLabel: a.purposeLabel,
+      authorityId: a.authorityId,
+      authorityName: a.authorityName,
+      authorityDesignation: '',
+      department: a.department,
+      date: a.date,
+      time: a.time,
+      subject: a.subject,
+      description: a.description,
+      mode: a.mode,
+      locationId: '',
+      locationLabel: a.locationLabel,
+      participantCount: null,
+      supportingReference: '',
+      documents: [],
+      requesterId: a.requesterId ?? '',
+      requesterName: a.requester,
+      requesterEmployeeId: '',
+      requesterDepartment: '',
+      submittedAt: a.submittedAt,
+      timeline: [{ event: 'Submitted', timestamp: a.submittedAt, actor: a.requester }],
+    }
+  }
   await delay(500)
 
   // Idempotency: return existing record if key already used

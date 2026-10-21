@@ -29,7 +29,12 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const loginAs  = useAuthStore(s => s.loginAs)
+  const login    = useAuthStore(s => s.login)
   const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? '/dashboard'
+
+  // When VITE_DATA_SOURCE=supabase the form authenticates against the backend;
+  // otherwise it uses the demo login so local/offline development still works.
+  const useBackend = import.meta.env.VITE_DATA_SOURCE === 'supabase'
 
   const [identifier, setIdentifier] = useState('')
   const [password,   setPassword]   = useState('')
@@ -56,17 +61,27 @@ export default function Login() {
     if (idErr || passErr) return
 
     setLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    setLoading(false)
-
-    if (identifier === 'wrong' || password === 'wrong') {
-      setBannerErr('Employee ID or password is incorrect. Check both and try again.')
+    try {
+      if (useBackend) {
+        // Identifier is the email for real logins.
+        await login(identifier.trim(), password)
+      } else {
+        // Demo/offline path: keep the short delay + the 'wrong' test shortcut.
+        await new Promise(r => setTimeout(r, 900))
+        if (identifier === 'wrong' || password === 'wrong') {
+          throw new Error('Employee ID or password is incorrect. Check both and try again.')
+        }
+        loginAs('requester')
+      }
+      navigate(returnTo, { replace: true })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Sign in failed. Try again.'
+      setBannerErr(message)
       // Move focus to the error banner for assistive technology.
       requestAnimationFrame(() => bannerRef.current?.focus())
-      return
+    } finally {
+      setLoading(false)
     }
-    loginAs('requester')
-    navigate(returnTo, { replace: true })
   }
 
   function handleDemoSignIn() {

@@ -1,6 +1,8 @@
 import express, { type Request, type Response, type NextFunction } from 'express'
 import cors from 'cors'
-import { isSupabaseConfigured } from './config/env.js'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
+import { env, isSupabaseConfigured } from './config/env.js'
 import { HttpError } from './lib/httpError.js'
 import { authRouter } from './routes/auth.js'
 import { appointmentsRouter } from './routes/appointments.js'
@@ -17,8 +19,22 @@ import './types.js'   // load the Express.Request augmentation
 export function createApp() {
   const app = express()
 
-  app.use(cors())
-  app.use(express.json())
+  // ── Security + middleware ──
+  app.disable('x-powered-by')
+  app.use(helmet())
+  // CORS limited to the configured browser origins (the frontend).
+  app.use(cors({ origin: env.corsOrigins, credentials: true }))
+  app.use(express.json({ limit: '1mb' }))
+
+  // Minimal request logging (method, path, status, duration).
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const start = Date.now()
+    res.on('finish', () => {
+      // eslint-disable-next-line no-console
+      console.log(`[req] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`)
+    })
+    next()
+  })
 
   // Health check — always available, even without Supabase configured.
   app.get('/health', (_req: Request, res: Response) => {
@@ -30,8 +46,18 @@ export function createApp() {
     })
   })
 
+  // Rate limit the auth surface to blunt brute-force attempts: 20 requests per
+  // minute per IP. Applied only to /auth so dashboards are not throttled.
+  const authLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: { code: 'rate_limited', message: 'Too many attempts. Try again in a minute.' } },
+  })
+
   // Auth: POST /auth/login, GET /auth/me
-  app.use('/auth', authRouter)
+  app.use('/auth', authLimiter, authRouter)
 
   // Appointments: GET /appointments, GET /appointments/:id, POST /appointments
   app.use('/appointments', appointmentsRouter)
