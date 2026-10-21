@@ -63,6 +63,43 @@ appointmentsRouter.get('/', requireAuth(), async (req: Request, res: Response, n
   }
 })
 
+// GET /appointments/reception/queue?date=YYYY-MM-DD — the reception desk queue
+// for a day: confirmed (expected / in progress) + completed (already seen),
+// ordered by time, scoped to what the actor may see. Declared BEFORE '/:id' so
+// the literal "reception" segment is not captured as an id.
+appointmentsRouter.get('/reception/queue', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'visitor.checkIn')
+
+    const date = String(req.query.date ?? '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new HttpError('validation', 'Provide a date as YYYY-MM-DD.')
+    }
+
+    const supabase = getSupabase()
+    let query = supabase
+      .from('appointments')
+      .select(APPOINTMENT_COLUMNS)
+      .eq('date', date)
+      .in('status', ['confirmed', 'completed'])
+    query = applyScope(query, actor)
+    const { data, error } = await query.order('time', { ascending: true })
+    if (error) throw new HttpError('internal_error', error.message)
+
+    const rows = (data ?? []) as unknown as AppointmentRow[]
+    const visible = rows.filter(r =>
+      canViewAppointment(
+        { id: actor.id, name: actor.name, role: actor.role },
+        { requester: r.requester, requesterId: r.requester_id ?? undefined, assignedRole: r.assigned_role ?? undefined },
+      ),
+    )
+    res.json({ queue: visible.map(toAppointmentDto) })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /appointments/:id — a single appointment the actor may see.
 appointmentsRouter.get('/:id', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -424,6 +461,124 @@ appointmentsRouter.get('/:id/timeline', requireAuth(), async (req, res, next) =>
       rows = rows.filter(r => r.visible_to_requester)
     }
     res.json({ timeline: rows.map(toTimelineDto) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── Visitor check-in / check-out + no-show (B6) ──────────────────────────────
+// Reception-desk actions, owned by admin_dispatcher (and super_admin). check-in
+// and check-out are audit actions, not status changes: the status stays
+// 'confirmed' through the visit and check-out transitions it to 'completed'.
+
+// POST /appointments/:id/check-in — confirmed only. Sets checked_in_at.
+appointmentsRouter.post('/:id/check-in', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'visitor.checkIn')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    if (row.status !== 'confirmed') {
+      throw new HttpError('illegal_transition', 'Only confirmed appointments can be checked in.')
+    }
+    if (row.checked_in_at) {
+      throw new HttpError('duplicate', 'This visitor has already been checked in.')
+    }
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ checked_in_at: now, assigned_stage: 'Checked in', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'checked-in',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Visitor checked in by ${actor.name}.`,
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/check-out — requires a prior check-in. Records the
+// departure and completes the appointment (confirmed → completed).
+appointmentsRouter.post('/:id/check-out', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'visitor.checkOut')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    if (!row.checked_in_at) {
+      throw new HttpError('illegal_transition', 'The visitor must be checked in before checking out.')
+    }
+    if (row.checked_out_at) {
+      throw new HttpError('duplicate', 'This visitor has already been checked out.')
+    }
+    assertTransitionOrThrow(row.status, 'completed')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ checked_out_at: now, status: 'completed', assigned_stage: 'Completed', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'checked-out',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Visitor checked out by ${actor.name}.`,
+    })
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'completed',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: 'Appointment completed.',
+      fromStatus: row.status, toStatus: 'completed',
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/not-reported — the time passed with no check-in.
+// confirmed → not-reported.
+appointmentsRouter.post('/:id/not-reported', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.markNotReported')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    assertTransitionOrThrow(row.status, 'not-reported')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'not-reported', assigned_stage: 'Not reported', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'not-reported',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Marked not reported by ${actor.name}.`,
+      fromStatus: row.status, toStatus: 'not-reported',
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
   } catch (err) {
     next(err)
   }
