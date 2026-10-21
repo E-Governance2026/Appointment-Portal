@@ -3,9 +3,10 @@ import { z } from 'zod'
 import { getSupabase } from '../lib/supabase.js'
 import { HttpError } from '../lib/httpError.js'
 import { requireAuth } from '../middleware/auth.js'
-import { requirePermission, requireCanView } from '../domain/guards.js'
+import { requirePermission, requireCanView, assertTransitionOrThrow } from '../domain/guards.js'
 import { canViewAppointment } from '../domain/permissions.js'
 import { APPOINTMENT_COLUMNS, toAppointmentDto, type AppointmentRow } from './appointmentMapper.js'
+import { AUDIT_COLUMNS, appendEvent, toTimelineDto, type AuditRow } from './auditLog.js'
 import { AUTHORITIES, BOOK_WITH_OPTIONS } from '../seed/seedData.js'
 import type { Actor } from '../types.js'
 
@@ -182,6 +183,247 @@ appointmentsRouter.post('/', requireAuth(), async (req: Request, res: Response, 
     if (error) throw new HttpError('internal_error', error.message)
 
     res.status(201).json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── Workflow (B5): approve / reject / request-info / confirm + timeline ──────
+// Each write action: requirePermission → load the row → requireCanView →
+// assertTransitionOrThrow → update the row → append an audit event. Mirrors the
+// write functions in src/services/appointmentsService.ts so the server enforces
+// the same rules the mock UI does.
+
+// Load a row by id or throw 404; shared by the workflow handlers.
+async function loadRow(id: string): Promise<AppointmentRow> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(APPOINTMENT_COLUMNS)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new HttpError('internal_error', error.message)
+  if (!data) throw new HttpError('not_found', `Appointment ${id} not found.`)
+  return data as unknown as AppointmentRow
+}
+
+// Throw 403 unless the actor may view this row. Reused across handlers.
+function assertCanView(actor: Actor, row: AppointmentRow): void {
+  requireCanView(
+    { id: actor.id, name: actor.name, role: actor.role },
+    { requester: row.requester, requesterId: row.requester_id ?? undefined, assignedRole: row.assigned_role ?? undefined },
+  )
+}
+
+const slotSchema = z.object({
+  date: z.string().trim().min(1),
+  time: z.string().trim().min(1),
+})
+
+// POST /appointments/:id/approve
+// Moves submitted|rescheduled → approved. If the request has no slot yet, the
+// approver MUST supply { date, time }; if it already has one, a slot in the
+// body overrides it. Appends an 'approved' event.
+export const approveSchema = z.object({
+  note: z.string().trim().optional(),
+  slot: slotSchema.optional(),
+})
+appointmentsRouter.post('/:id/approve', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.approve')
+
+    const parsed = approveSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'Invalid approval details.')
+    }
+    const { note, slot } = parsed.data
+
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    if (row.status === 'approved') {
+      throw new HttpError('duplicate', 'This request has already been approved.')
+    }
+    assertTransitionOrThrow(row.status, 'approved')
+
+    const alreadyHasSlot = !!row.date && !!row.time
+    let date = row.date
+    let time = row.time
+    if (!alreadyHasSlot) {
+      if (!slot) throw new HttpError('illegal_transition', 'Provide a date and time to approve this request.')
+      date = slot.date
+      time = slot.time
+    } else if (slot) {
+      date = slot.date
+      time = slot.time
+    }
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'approved', date, time, assigned_stage: 'Confirmation pending', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    const slotDetail = `Scheduled for ${date} at ${time}.`
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'approved',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Approved by ${actor.name}.`,
+      detail: note ? `${slotDetail} ${note}` : slotDetail,
+      fromStatus: row.status, toStatus: 'approved',
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/reject — reason required. → rejected.
+export const reasonSchema = z.object({ reason: z.string().trim().min(1, 'A reason is required to reject a request.') })
+appointmentsRouter.post('/:id/reject', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.reject')
+    const parsed = reasonSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'A reason is required.')
+    }
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    assertTransitionOrThrow(row.status, 'rejected')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'rejected', assigned_stage: 'Rejected', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'rejected',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Rejected by ${actor.name}.`, detail: parsed.data.reason,
+      fromStatus: row.status, toStatus: 'rejected',
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/request-info — message required. → additional-info.
+export const messageSchema = z.object({ message: z.string().trim().min(1, 'Describe what information is needed.') })
+appointmentsRouter.post('/:id/request-info', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.requestInfo')
+    const parsed = messageSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'A message is required.')
+    }
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    assertTransitionOrThrow(row.status, 'additional-info')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'additional-info', assigned_stage: 'Awaiting requester', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'info-requested',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Information requested by ${actor.name}.`, detail: parsed.data.message,
+      fromStatus: row.status, toStatus: 'additional-info',
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/confirm — approved → confirmed. Requires a slot set.
+// Appends a 'confirmed' event plus a 'notification-sent' event (website + email).
+appointmentsRouter.post('/:id/confirm', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.confirm')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    if (row.status === 'confirmed') {
+      throw new HttpError('duplicate', 'This appointment is already confirmed.')
+    }
+    if (!row.date || !row.time) {
+      throw new HttpError('illegal_transition', 'A date and time must be set before confirming.')
+    }
+    assertTransitionOrThrow(row.status, 'confirmed')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'confirmed', assigned_stage: 'Confirmed', updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'confirmed',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Confirmed by ${actor.name}.`,
+      fromStatus: row.status, toStatus: 'confirmed',
+    })
+    // Confirmation notification (website + email), recorded as a system event.
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'notification-sent',
+      actorId: 'system', actorName: 'System', actorRole: 'system',
+      summary: 'Confirmation sent to the requester by website and email.',
+      detail: `Appointment confirmed for ${row.date} at ${row.time}.`,
+    })
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /appointments/:id/timeline — audit events for an appointment the actor
+// may view. Requesters do not see internal (visible_to_requester = false) events.
+appointmentsRouter.get('/:id/timeline', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+
+    const supabase = getSupabase()
+    const { data, error } = await supabase
+      .from('audit_events')
+      .select(AUDIT_COLUMNS)
+      .eq('appointment_id', row.id)
+      .order('timestamp', { ascending: true })
+    if (error) throw new HttpError('internal_error', error.message)
+
+    let rows = (data ?? []) as unknown as AuditRow[]
+    if (actor.role === 'requester') {
+      rows = rows.filter(r => r.visible_to_requester)
+    }
+    res.json({ timeline: rows.map(toTimelineDto) })
   } catch (err) {
     next(err)
   }
