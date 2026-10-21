@@ -7,6 +7,7 @@ import { appointmentsRouter } from './routes/appointments.js'
 import { availabilityRouter } from './routes/availability.js'
 import { reportsRouter } from './routes/reports.js'
 import { masterRouter } from './routes/master.js'
+import { usersRouter } from './routes/users.js'
 import './types.js'   // load the Express.Request augmentation
 
 // ─── Express app ──────────────────────────────────────────────────────────────
@@ -43,6 +44,9 @@ export function createApp() {
 
   // Master data (super admin): GET /master + CRUD for departments/types/authorities
   app.use('/master', masterRouter)
+
+  // User management (super admin): GET/POST/PUT/PATCH/DELETE /users
+  app.use('/users', usersRouter)
 
   // 404 for unknown routes.
   app.use((_req: Request, res: Response) => {
