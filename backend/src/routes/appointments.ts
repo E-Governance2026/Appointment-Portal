@@ -7,6 +7,7 @@ import { requirePermission, requireCanView, assertTransitionOrThrow } from '../d
 import { canViewAppointment } from '../domain/permissions.js'
 import { APPOINTMENT_COLUMNS, toAppointmentDto, type AppointmentRow } from './appointmentMapper.js'
 import { AUDIT_COLUMNS, appendEvent, toTimelineDto, type AuditRow } from './auditLog.js'
+import { sweepNoShows } from '../domain/noShowSweep.js'
 import { AUTHORITIES, BOOK_WITH_OPTIONS } from '../seed/seedData.js'
 import type { Actor } from '../types.js'
 
@@ -95,6 +96,61 @@ appointmentsRouter.get('/reception/queue', requireAuth(), async (req: Request, r
       ),
     )
     res.json({ queue: visible.map(toAppointmentDto) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /appointments/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD — appointments with
+// a date in [from, to] the actor may see. Declared before '/:id'.
+appointmentsRouter.get('/calendar', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!
+    const from = String(req.query.from ?? '').trim()
+    const to   = String(req.query.to ?? '').trim()
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/
+    if (!dateRe.test(from) || !dateRe.test(to)) {
+      throw new HttpError('validation', 'Provide from and to dates as YYYY-MM-DD.')
+    }
+
+    const supabase = getSupabase()
+    let query = supabase.from('appointments').select(APPOINTMENT_COLUMNS).gte('date', from).lte('date', to)
+    query = applyScope(query, actor)
+    const { data, error } = await query.order('date', { ascending: true })
+    if (error) throw new HttpError('internal_error', error.message)
+
+    const rows = (data ?? []) as unknown as AppointmentRow[]
+    const visible = rows.filter(r => canViewAppointment(
+      { id: actor.id, name: actor.name, role: actor.role },
+      { requester: r.requester, requesterId: r.requester_id ?? undefined, assignedRole: r.assigned_role ?? undefined },
+    ))
+    res.json({ appointments: visible.map(toAppointmentDto) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /appointments/day?date=YYYY-MM-DD — a single day, ordered by time.
+appointmentsRouter.get('/day', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!
+    const date = String(req.query.date ?? '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new HttpError('validation', 'Provide a date as YYYY-MM-DD.')
+    }
+
+    const supabase = getSupabase()
+    let query = supabase.from('appointments').select(APPOINTMENT_COLUMNS).eq('date', date)
+    query = applyScope(query, actor)
+    const { data, error } = await query.order('time', { ascending: true })
+    if (error) throw new HttpError('internal_error', error.message)
+
+    const rows = (data ?? []) as unknown as AppointmentRow[]
+    const visible = rows.filter(r => canViewAppointment(
+      { id: actor.id, name: actor.name, role: actor.role },
+      { requester: r.requester, requesterId: r.requester_id ?? undefined, assignedRole: r.assigned_role ?? undefined },
+    ))
+    res.json({ appointments: visible.map(toAppointmentDto) })
   } catch (err) {
     next(err)
   }
@@ -579,6 +635,47 @@ appointmentsRouter.post('/:id/not-reported', requireAuth(), async (req, res, nex
     })
 
     res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── No-show sweep + notifications (B10) ──────────────────────────────────────
+
+// POST /appointments/sweep-no-shows — mark confirmed, un-checked-in, past-slot
+// appointments as not-reported. On-demand trigger for the same routine a cron
+// job runs. Requires the no-show capability (admin_dispatcher / super_admin).
+appointmentsRouter.post('/sweep-no-shows', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.markNotReported')
+    const result = await sweepNoShows(getSupabase())
+    res.json(result)
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /appointments/:id/notifications — the notification events for an
+// appointment the actor may view (the website + email confirmations recorded as
+// 'notification-sent' audit rows).
+appointmentsRouter.get('/:id/notifications', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+
+    const supabase = getSupabase()
+    const { data, error } = await supabase
+      .from('audit_events')
+      .select(AUDIT_COLUMNS)
+      .eq('appointment_id', row.id)
+      .eq('action', 'notification-sent')
+      .order('timestamp', { ascending: true })
+    if (error) throw new HttpError('internal_error', error.message)
+
+    const rows = (data ?? []) as unknown as AuditRow[]
+    res.json({ notifications: rows.map(toTimelineDto) })
   } catch (err) {
     next(err)
   }
