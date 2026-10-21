@@ -49,10 +49,15 @@ Through `src/services/appointmentsService.ts` (and the login flow):
 - Auth: real login (`POST /auth/login`), token stored and sent as a bearer on
   every request.
 - Appointments: list, single, calendar range, single day, reception queue.
-- Workflow: approve, reject, request info, confirm.
-- Visitors: check-in, check-out, mark not-reported.
+- Workflow: approve, reject, request info, confirm, forward, internal remark,
+  reschedule (propose + respond), cancel, provide info, mark not-reported.
+- Visitors: check-in, check-out.
 - Timeline + availability read/update, reports, master-data CRUD, user CRUD.
 - Booking submit (`POST /appointments`, 3-step flow with an idempotency key).
+
+The full appointment lifecycle — book, review, request/provide info, approve,
+confirm, reschedule, cancel, check in/out, and no-show — now runs against the
+backend, with every action recorded in the audit timeline.
 
 ## What is still mock (deferred)
 
@@ -66,8 +71,3 @@ These have no backend endpoint yet and keep serving demo data even when
   document upload, next-available).
 - Static pages that render seed data directly: Track, My appointments,
   Appointment detail.
-
-A few workflow actions exist in the UI but are not built on the server yet
-(forward, internal remark, reschedule propose/respond, cancel, provide info);
-under the backend they surface a clear "not available on the server yet"
-message rather than failing silently.

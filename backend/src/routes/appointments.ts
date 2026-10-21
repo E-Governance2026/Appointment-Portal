@@ -4,12 +4,12 @@ import { getSupabase } from '../lib/supabase.js'
 import { HttpError } from '../lib/httpError.js'
 import { requireAuth } from '../middleware/auth.js'
 import { requirePermission, requireCanView, assertTransitionOrThrow } from '../domain/guards.js'
-import { canViewAppointment } from '../domain/permissions.js'
+import { canViewAppointment, hasPermission, ROLES } from '../domain/permissions.js'
 import { APPOINTMENT_COLUMNS, toAppointmentDto, type AppointmentRow } from './appointmentMapper.js'
 import { AUDIT_COLUMNS, appendEvent, toTimelineDto, type AuditRow } from './auditLog.js'
 import { sweepNoShows } from '../domain/noShowSweep.js'
 import { AUTHORITIES, BOOK_WITH_OPTIONS } from '../seed/seedData.js'
-import type { Actor } from '../types.js'
+import type { Actor, Role } from '../types.js'
 
 // ─── Appointments routes ──────────────────────────────────────────────────────
 // Read endpoints (list + single) scoped by the same row-level visibility rule
@@ -676,6 +676,235 @@ appointmentsRouter.get('/:id/notifications', requireAuth(), async (req, res, nex
 
     const rows = (data ?? []) as unknown as AuditRow[]
     res.json({ notifications: rows.map(toTimelineDto) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── Remaining workflow actions (B12) ─────────────────────────────────────────
+// forward, internal remark, reschedule propose/respond, cancel, provide info.
+// Same pattern: permission → load → view check → (transition) → update → audit.
+
+// POST /appointments/:id/forward — reassign to another role. No status change.
+const forwardSchema = z.object({ toRole: z.enum(ROLES as [Role, ...Role[]]) })
+appointmentsRouter.post('/:id/forward', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.forward')
+    const parsed = forwardSchema.safeParse(req.body ?? {})
+    if (!parsed.success) throw new HttpError('validation', 'Choose a role to forward to.')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ assigned_role: parsed.data.toRole, assigned_stage: 'Forwarded for approval', updated_at: now })
+      .eq('id', row.id).select(APPOINTMENT_COLUMNS).single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'forwarded',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Forwarded to ${parsed.data.toRole} by ${actor.name}.`,
+    })
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/internal-remark — hidden from the requester. Returns
+// the created audit event (matching the mock addInternalRemark).
+const remarkSchema = z.object({ text: z.string().trim().min(1, 'Enter a remark.') })
+appointmentsRouter.post('/:id/internal-remark', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.internalRemark')
+    const parsed = remarkSchema.safeParse(req.body ?? {})
+    if (!parsed.success) throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'Enter a remark.')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+
+    const supabase = getSupabase()
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'internal-remark',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Internal remark by ${actor.name}.`, detail: parsed.data.text,
+      visibleToRequester: false,
+    })
+    // Read the event we just wrote back (latest internal-remark for this appt).
+    const { data, error } = await supabase
+      .from('audit_events')
+      .select(AUDIT_COLUMNS)
+      .eq('appointment_id', row.id)
+      .eq('action', 'internal-remark')
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) throw new HttpError('internal_error', error.message)
+    res.status(201).json({ event: data ? toTimelineDto(data as unknown as AuditRow) : null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/propose-reschedule — → rescheduled with a proposed slot.
+const proposeSchema = z.object({
+  proposedDate: z.string().trim().min(1, 'A new date is required.'),
+  proposedTime: z.string().trim().min(1, 'A new time is required.'),
+  note:         z.string().trim().optional(),
+})
+appointmentsRouter.post('/:id/propose-reschedule', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.proposeReschedule')
+    const parsed = proposeSchema.safeParse(req.body ?? {})
+    if (!parsed.success) throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'A new date and time are required.')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    assertTransitionOrThrow(row.status, 'rescheduled')
+
+    const { proposedDate, proposedTime, note } = parsed.data
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'rescheduled', proposed_date: proposedDate, proposed_time: proposedTime, assigned_stage: 'Awaiting requester', updated_at: now })
+      .eq('id', row.id).select(APPOINTMENT_COLUMNS).single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'reschedule-proposed',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Reschedule proposed by ${actor.name}.`,
+      detail: `New slot proposed: ${proposedDate} at ${proposedTime}.${note ? ` ${note}` : ''}`,
+      fromStatus: row.status, toStatus: 'rescheduled',
+    })
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/respond-reschedule — requester accepts or declines.
+const respondSchema = z.object({ decision: z.enum(['accept', 'decline']) })
+appointmentsRouter.post('/:id/respond-reschedule', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.respondReschedule')
+    const parsed = respondSchema.safeParse(req.body ?? {})
+    if (!parsed.success) throw new HttpError('validation', 'Choose accept or decline.')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    if (row.status !== 'rescheduled') {
+      throw new HttpError('illegal_transition', 'There is no pending reschedule to respond to.')
+    }
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    if (parsed.data.decision === 'accept') {
+      const { data, error } = await supabase
+        .from('appointments')
+        .update({
+          status: 'confirmed', assigned_stage: 'Confirmed',
+          date: row.proposed_date, time: row.proposed_time,
+          proposed_date: null, proposed_time: null, updated_at: now,
+        })
+        .eq('id', row.id).select(APPOINTMENT_COLUMNS).single()
+      if (error) throw new HttpError('internal_error', error.message)
+      await appendEvent(supabase, {
+        appointmentId: row.id, action: 'reschedule-accepted',
+        actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+        summary: `New schedule accepted by ${actor.name}.`,
+        fromStatus: 'rescheduled', toStatus: 'confirmed',
+      })
+      return res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+    }
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled', assigned_stage: 'Cancelled', proposed_date: null, proposed_time: null, updated_at: now })
+      .eq('id', row.id).select(APPOINTMENT_COLUMNS).single()
+    if (error) throw new HttpError('internal_error', error.message)
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'reschedule-declined',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `New schedule declined by ${actor.name}.`,
+      fromStatus: 'rescheduled', toStatus: 'cancelled',
+    })
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/cancel — reason required. Staff use appointment.cancel;
+// the requester uses appointment.requestCancel.
+appointmentsRouter.post('/:id/cancel', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    const action = actor.role === 'requester' ? 'appointment.requestCancel' : 'appointment.cancel'
+    if (!hasPermission(actor.role, action)) {
+      throw new HttpError('forbidden', 'You do not have permission to cancel this appointment.')
+    }
+    const parsed = reasonSchema.safeParse(req.body ?? {})
+    if (!parsed.success) throw new HttpError('validation', 'A reason is required to cancel.')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    assertTransitionOrThrow(row.status, 'cancelled')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled', assigned_stage: 'Cancelled', updated_at: now })
+      .eq('id', row.id).select(APPOINTMENT_COLUMNS).single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'cancelled',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Cancelled by ${actor.name}.`, detail: parsed.data.reason,
+      fromStatus: row.status, toStatus: 'cancelled',
+    })
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/provide-info — requester supplies the requested info.
+// additional-info → submitted.
+appointmentsRouter.post('/:id/provide-info', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    requirePermission(actor, 'appointment.provideInfo')
+    const parsed = messageSchema.safeParse(req.body ?? {})
+    if (!parsed.success) throw new HttpError('validation', 'Enter the requested information before sending.')
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+    if (row.status !== 'additional-info') {
+      throw new HttpError('illegal_transition', 'No information was requested for this appointment.')
+    }
+    assertTransitionOrThrow(row.status, 'submitted')
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: 'submitted', assigned_stage: 'Authority review', updated_at: now })
+      .eq('id', row.id).select(APPOINTMENT_COLUMNS).single()
+    if (error) throw new HttpError('internal_error', error.message)
+
+    await appendEvent(supabase, {
+      appointmentId: row.id, action: 'info-provided',
+      actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+      summary: `Information provided by ${actor.name}.`, detail: parsed.data.message,
+      fromStatus: 'additional-info', toStatus: 'submitted',
+    })
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
   } catch (err) {
     next(err)
   }

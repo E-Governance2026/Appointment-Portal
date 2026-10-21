@@ -271,7 +271,10 @@ export async function confirmAppointment(id: string, actor: Actor): Promise<Appr
 
 /** Forward to another role for approval (coordinator escalation). */
 export async function forwardForApproval(id: string, actor: Actor, toRole: Role): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Forwarding is not available on the server yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/forward`, { toRole })
+    return res.appointment
+  }
   await delay(250)
   requirePermission(actor, 'appointment.forward')
   const rec = find(id)
@@ -288,7 +291,10 @@ export async function forwardForApproval(id: string, actor: Actor, toRole: Role)
 
 /** Add an internal remark — hidden from the requester. */
 export async function addInternalRemark(id: string, actor: Actor, text: string): Promise<AuditEvent> {
-  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Internal remarks are not available on the server yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ event: AuditEvent }>(`/appointments/${id}/internal-remark`, { text })
+    return res.event
+  }
   await delay(200)
   requirePermission(actor, 'appointment.internalRemark')
   if (!text.trim()) throw new ServiceError('illegal_transition', 'Enter a remark.')
@@ -309,7 +315,10 @@ export async function addInternalRemark(id: string, actor: Actor, text: string):
 export async function proposeReschedule(
   id: string, actor: Actor, proposedDate: string, proposedTime: string, note?: string,
 ): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Rescheduling is not available on the server yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/propose-reschedule`, { proposedDate, proposedTime, note })
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.proposeReschedule')
   if (!proposedDate || !proposedTime) {
@@ -332,7 +341,10 @@ export async function proposeReschedule(
 export async function respondReschedule(
   id: string, actor: Actor, decision: 'accept' | 'decline',
 ): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Responding to a reschedule is not available on the server yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/respond-reschedule`, { decision })
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.respondReschedule')
   const rec = find(id)
@@ -359,7 +371,10 @@ export async function respondReschedule(
  * non-terminal status the machine permits a cancel from.
  */
 export async function cancelAppointment(id: string, actor: Actor, reason: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Cancellation is not available on the server yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/cancel`, { reason })
+    return res.appointment
+  }
   await delay(300)
   const action: Action = actor.role === 'requester' ? 'appointment.requestCancel' : 'appointment.cancel'
   requirePermission(actor, action)
@@ -377,7 +392,10 @@ export async function cancelAppointment(id: string, actor: Actor, reason: string
  * Moves additional-info → submitted so the request re-enters review.
  */
 export async function provideAdditionalInfo(id: string, actor: Actor, message: string): Promise<ApprovalRecord> {
-  if (DATA_SOURCE === 'supabase') throw new ServiceError('validation', 'Providing additional information is not available on the server yet.')
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/provide-info`, { message })
+    return res.appointment
+  }
   await delay(300)
   requirePermission(actor, 'appointment.provideInfo')
   if (!message.trim()) {
