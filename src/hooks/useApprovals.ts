@@ -14,6 +14,7 @@ import {
   cancelAppointment,
   provideAdditionalInfo,
   markNotReported,
+  updateMeetingUrl,
   type Actor,
 } from '../services/appointmentsService'
 import { useAuthStore } from '../store/authStore'
@@ -70,11 +71,23 @@ export function useApprove() {
   const actor = useActor()
   const invalidate = useInvalidate()
   return useMutation({
-    mutationFn: ({ id, note, date, time }: { id: string; note?: string; date?: string; time?: string }) =>
+    mutationFn: ({ id, note, date, time, meetingUrl, confirm }: { id: string; note?: string; date?: string; time?: string; meetingUrl?: string; confirm?: boolean }) =>
       approveAppointment(id, actor, {
         note,
         slot: date && time ? { date, time } : undefined,
+        meetingUrl,
+        confirm,
       }),
+    onSuccess: (rec) => invalidate(rec.id),
+  })
+}
+
+export function useUpdateMeetingUrl() {
+  const actor = useActor()
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ id, meetingUrl }: { id: string; meetingUrl: string }) =>
+      updateMeetingUrl(id, actor, meetingUrl),
     onSuccess: (rec) => invalidate(rec.id),
   })
 }

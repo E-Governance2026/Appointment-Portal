@@ -9,6 +9,7 @@ import Section from '../components/layout/Section'
 import MobileNavDrawer from '../components/common/MobileNavDrawer'
 import Logo from '../components/ui/Logo'
 import Button from '../components/ui/Button'
+import { useAuthStore } from '../store/authStore'
 
 // ─── Nav + content data ───────────────────────────────────────────────────────
 const NAV_LINKS = [
@@ -51,12 +52,19 @@ const SECTION_IDS = ['top', 'process', 'about', 'contact']
 
 export default function Landing() {
   const navigate = useNavigate()
+  const user = useAuthStore(s => s.user)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [activeSection, setActiveSection] = useState('top')
 
-  function goLogin() { navigate('/login', { state: { returnTo: '/' } }) }
-  function goTrack() { navigate('/track', { state: { returnTo: '/' } }) }
+  function goLogin() {
+    if (user) {
+      navigate('/dashboard')
+    } else {
+      navigate('/login', { state: { returnTo: '/dashboard' } })
+    }
+  }
+  function goTrack() { navigate('/track') }
 
   const prefersReducedMotion = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -123,7 +131,7 @@ export default function Landing() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
             <span className="hidden-mobile">
-              <Button variant="primary" size="sm" onClick={goLogin}>Login</Button>
+              <Button variant="primary" size="sm" onClick={goLogin}>{user ? 'Dashboard' : 'Login'}</Button>
             </span>
             <button className="show-mobile" onClick={() => setDrawerOpen(true)}
               aria-label="Open navigation menu" aria-expanded={drawerOpen}
@@ -141,7 +149,7 @@ export default function Landing() {
       {/* Hero */}
       <Section>
         <Container>
-          <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '3rem', alignItems: 'center' }}>
+          <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '3rem', alignItems: 'center', overflow: 'hidden' }}>
             <div>
               <h1 style={{ fontFamily: FONT_SERIF, fontWeight: 600, fontSize: 'clamp(2rem, 4vw, 3rem)',
                 lineHeight: 1.17, color: 'var(--color-charcoal)', margin: '0 0 1.25rem 0', textWrap: 'balance' }}>
@@ -157,12 +165,12 @@ export default function Landing() {
               </div>
             </div>
 
-            <div className="hero-image" style={{ aspectRatio: '4 / 3', backgroundColor: 'var(--color-sage)',
-              border: '1px dashed var(--color-text-secondary)', borderRadius: '12px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <p style={{ fontFamily: FONT_SANS, fontSize: '14px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '1rem', margin: 0 }}>
-                Replace with official campus photograph
-              </p>
+            <div className="hero-image" style={{ flex: '0 0 auto', width: '45%', minWidth: '280px', maxWidth: '480px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#EBF4F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img
+                src="/images/campus-naac.jpg"
+                alt="Parul University — India's youngest NAAC A++ accredited university"
+                style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }}
+              />
             </div>
           </div>
         </Container>
@@ -229,33 +237,41 @@ export default function Landing() {
       <Section id="about" style={{ backgroundColor: 'var(--color-ivory)', borderTop: '1px solid var(--color-sage)',
         borderBottom: '1px solid var(--color-sage)', scrollMarginTop: '88px' }}>
         <Container>
-          <div className="about-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', alignItems: 'start' }}>
+          <div className="about-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', alignItems: 'center' }}>
             <div>
               <h2 style={{ ...sectionHeading, margin: '0 0 1.25rem 0' }}>About Appointment Portal</h2>
-              <p style={{ fontFamily: FONT_SANS, fontSize: '16px', lineHeight: 1.75, color: 'var(--color-text-secondary)', maxWidth: '60ch', margin: 0 }}>
+              <p style={{ fontFamily: FONT_SANS, fontSize: '16px', lineHeight: 1.75, color: 'var(--color-text-secondary)', maxWidth: '60ch', margin: '0 0 2rem 0' }}>
                 Appointment Portal is the departmental system for requesting appointments with university authorities.
                 Each request follows the approval workflow set by the department.
               </p>
+              <div style={{ backgroundColor: 'var(--color-cream)', border: '1px solid var(--color-sage)', borderRadius: '12px', padding: '24px' }}>
+                <h3 style={{ fontFamily: FONT_SERIF, fontWeight: 600, fontSize: '18px', color: 'var(--color-charcoal)', margin: '0 0 1rem 0' }}>
+                  Who uses the portal
+                </h3>
+                <ul role="list" style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', margin: 0, padding: 0, listStyle: 'none' }}>
+                  {ROLES_USING.map(r => (
+                    <li key={r.role} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                      <span aria-hidden="true" style={{ width: '32px', height: '32px', flexShrink: 0, borderRadius: 'var(--radius-md)',
+                        backgroundColor: '#DCEFE9', color: 'var(--color-emerald)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {r.icon}
+                      </span>
+                      <span>
+                        <span style={{ display: 'block', fontFamily: FONT_SANS, fontWeight: 600, fontSize: '15px', color: 'var(--color-charcoal)' }}>{r.role}</span>
+                        <span style={{ display: 'block', fontFamily: FONT_SANS, fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{r.desc}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
 
-            <div style={{ backgroundColor: 'var(--color-cream)', border: '1px solid var(--color-sage)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ fontFamily: FONT_SERIF, fontWeight: 600, fontSize: '18px', color: 'var(--color-charcoal)', margin: '0 0 1rem 0' }}>
-                Who uses the portal
-              </h3>
-              <ul role="list" style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', margin: 0, padding: 0, listStyle: 'none' }}>
-                {ROLES_USING.map(r => (
-                  <li key={r.role} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                    <span aria-hidden="true" style={{ width: '32px', height: '32px', flexShrink: 0, borderRadius: 'var(--radius-md)',
-                      backgroundColor: '#DCEFE9', color: 'var(--color-emerald)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {r.icon}
-                    </span>
-                    <span>
-                      <span style={{ display: 'block', fontFamily: FONT_SANS, fontWeight: 600, fontSize: '15px', color: 'var(--color-charcoal)' }}>{r.role}</span>
-                      <span style={{ display: 'block', fontFamily: FONT_SANS, fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{r.desc}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            {/* Right column: full-bleed accredited campus photo */}
+            <div style={{ borderRadius: '16px', overflow: 'hidden', width: '100%' }}>
+              <img
+                src="/images/campus-accredited.jpg"
+                alt="Parul University — India's youngest NAAC A++ accredited university"
+                style={{ width: '100%', height: 'auto', objectFit: 'cover', display: 'block', aspectRatio: '4 / 3' }}
+              />
             </div>
           </div>
         </Container>

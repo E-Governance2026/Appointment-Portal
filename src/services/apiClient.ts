@@ -28,7 +28,7 @@ export function setToken(token: string | null): void {
   }
 }
 
-function baseUrl(): string {
+export function baseUrl(): string {
   const url = import.meta.env.VITE_API_BASE_URL
   if (!url) {
     throw new ServiceError('validation', 'VITE_API_BASE_URL is not set; cannot reach the backend.')

@@ -1,4 +1,5 @@
 import { useState, useId } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
 
 interface ActionDialogProps {
@@ -48,21 +49,41 @@ export default function ActionDialog({
 
   const confirmDisabled = (required && !text.trim()) || submitting
 
-  return (
+  const content = (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="action-dialog-title"
       style={{
-        position: 'fixed', inset: 0, zIndex: 300, display: 'flex',
-        alignItems: 'center', justifyContent: 'center', padding: '1rem',
-        backgroundColor: 'rgba(23,37,34,0.45)',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem 1rem',
+        backgroundColor: 'rgba(23, 37, 34, 0.55)',
+        backdropFilter: 'blur(3px)',
+        overflowY: 'auto',
+        boxSizing: 'border-box',
       }}
       onClick={() => !submitting && onClose()}
     >
       <div
         className="card"
-        style={{ maxWidth: '460px', width: '100%' }}
+        style={{
+          maxWidth: '460px',
+          width: '100%',
+          boxShadow: 'var(--elevation-3)',
+          borderRadius: 'var(--radius-xl)',
+          backgroundColor: 'var(--color-ivory)',
+          border: '1px solid var(--color-sage)',
+        }}
         onClick={e => e.stopPropagation()}
       >
         <h3
@@ -129,4 +150,9 @@ export default function ActionDialog({
       `}</style>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(content, document.body)
+  }
+  return content
 }

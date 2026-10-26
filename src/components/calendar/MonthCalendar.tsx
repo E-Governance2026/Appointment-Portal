@@ -26,15 +26,15 @@ function dotColor(status: AppointmentStatus): string {
   switch (status) {
     case 'approved':
     case 'confirmed':
-    case 'completed':
       return 'var(--color-emerald)'
+    case 'completed':
+      return 'var(--color-info)'
     case 'submitted':
     case 'additional-info':
       return 'var(--color-amber)'
     case 'rescheduled':
       return 'var(--color-info)'
     case 'rejected':
-    case 'not-reported':
       return 'var(--color-danger)'
     default:
       return 'var(--color-text-secondary)'   // cancelled / draft
@@ -196,6 +196,7 @@ export default function MonthCalendar({
         {[
           { label: 'Approved or confirmed', color: 'var(--color-emerald)' },
           { label: 'Awaiting review',       color: 'var(--color-amber)'   },
+          { label: 'Completed',             color: 'var(--color-info)'    },
           { label: 'Rescheduled',           color: 'var(--color-info)'    },
           { label: 'Rejected or not reported', color: 'var(--color-danger)' },
         ].map(item => (

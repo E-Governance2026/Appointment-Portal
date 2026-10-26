@@ -1,17 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 
-// Layout
-import Layout from './components/layout/Layout'
-
-// Public Pages
-import Landing          from './pages/Landing'
-import Login            from './pages/Login'
-import TrackAppointment from './pages/TrackAppointment'
-
-// Auth Pages
+import Layout            from './components/layout/Layout'
+import Landing           from './pages/Landing'
+import Login             from './pages/Login'
+import TrackAppointment  from './pages/TrackAppointment'
 import Dashboard         from './pages/Dashboard'
-import BookAppointment   from './pages/BookAppointment'          // old wizard (kept)
-import BookAppointmentNew from './pages/BookAppointmentNew'       // new 6-step flow
+import BookAppointment   from './pages/BookAppointment'
+import BookAppointmentNew from './pages/BookAppointmentNew'
 import BookingConfirmation from './pages/BookingConfirmation'
 import MyAppointments    from './pages/MyAppointments'
 import AppointmentDetail from './pages/AppointmentDetail'
@@ -31,22 +26,19 @@ export default function App() {
       <Routes>
 
         {/* ── Public routes ── */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/track" element={<TrackAppointment />} />
+        <Route path="/"              element={<Landing />} />
+        <Route path="/login"         element={<Login />} />
+        <Route path="/track"         element={<TrackAppointment />} />
         <Route path="/access-denied" element={<AccessDenied />} />
 
-        {/* ── Authenticated routes (sidebar + navbar shell) ── */}
-        {/* Role gates come from permissions.ts NAV_ACCESS (PRD §3, §9). */}
+        {/* ── Authenticated routes ── */}
         <Route element={<Layout />}>
-          {/* Open to all authenticated users */}
-          <Route path="/dashboard"            element={<Dashboard />} />
-          <Route path="/my-appointments"      element={<MyAppointments />} />
-          <Route path="/my-appointments/:id"  element={<AppointmentDetail />} />
-          <Route path="/calendar"             element={<CalendarPage />} />
-          <Route path="/settings"             element={<Settings />} />
+          <Route path="/dashboard"           element={<Dashboard />} />
+          <Route path="/my-appointments"     element={<MyAppointments />} />
+          <Route path="/my-appointments/:id" element={<AppointmentDetail />} />
+          <Route path="/calendar"            element={<CalendarPage />} />
+          <Route path="/settings"            element={<Settings />} />
 
-          {/* Booking — all roles */}
           <Route path="/book" element={
             <RequireRole allow={['requester','coordinator_authority','admin_dispatcher','super_admin']}>
               <BookAppointmentNew />
@@ -62,29 +54,21 @@ export default function App() {
               <BookAppointment />
             </RequireRole>
           } />
-
-          {/* Approvals — coordinator/authority, admin dispatcher, super admin */}
           <Route path="/approvals" element={
             <RequireRole allow={['coordinator_authority','admin_dispatcher','super_admin']}>
               <Approvals />
             </RequireRole>
           } />
-
-          {/* Visitor management — admin dispatcher (reception desk), super admin */}
           <Route path="/visitor-management" element={
             <RequireRole allow={['admin_dispatcher','super_admin']}>
               <VisitorManagement />
             </RequireRole>
           } />
-
-          {/* Reports — coordinator/authority, admin dispatcher, super admin */}
           <Route path="/reports" element={
             <RequireRole allow={['coordinator_authority','admin_dispatcher','super_admin']}>
               <Reports />
             </RequireRole>
           } />
-
-          {/* Admin-only */}
           <Route path="/master-management" element={
             <RequireRole allow={['super_admin']}>
               <MasterManagement />
@@ -97,7 +81,6 @@ export default function App() {
           } />
         </Route>
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

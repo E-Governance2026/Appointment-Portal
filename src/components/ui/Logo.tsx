@@ -34,9 +34,23 @@ export default function Logo({ size = 'md', variant = 'light', showText = true }
           backgroundColor: onDark ? 'var(--color-on-forest-12)' : 'var(--color-forest)',
           border: onDark ? '1px solid rgb(255 255 255 / 0.22)' : 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden',
         }}
       >
-        <CalendarCheck size={ICON[size]} color="#ffffff" aria-hidden="true" />
+        <img
+          src="/images/pu-logo.jpg"
+          alt="Parul University"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={e => {
+            // Fallback to the icon if the image isn't loaded yet.
+            const t = e.currentTarget
+            t.style.display = 'none'
+            const icon = document.createElement('span')
+            icon.textContent = 'PU'
+            icon.style.cssText = 'color:#fff;font-weight:700;font-family:sans-serif'
+            t.parentElement?.appendChild(icon)
+          }}
+        />
       </div>
 
       {showText && (

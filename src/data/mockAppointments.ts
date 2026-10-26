@@ -5,9 +5,9 @@ import type { Role } from '../config/permissions'
 import { canViewAppointment } from '../config/permissions'
 import { api } from '../services/apiClient'
 
-// Which data source backs the dashboard reads (same flag the service uses).
+// Which data source backs the dashboard reads — supabase when API URL is set.
 const DATA_SOURCE: 'mock' | 'supabase' =
-  (import.meta.env.VITE_DATA_SOURCE as 'mock' | 'supabase') ?? 'mock'
+  import.meta.env.MODE === 'test' ? 'mock' : (import.meta.env.VITE_API_BASE_URL ? 'supabase' : 'mock')
 
 export type AppointmentStatus =
   | 'draft'
@@ -62,6 +62,9 @@ export interface AppointmentRecord {
   status: AppointmentStatus
   assignedRole?: Role   // which staff role currently owns the row (for scoping)
   createdAt: string     // ISO datetime
+  mode?: 'physical' | 'online' | 'phone'
+  locationLabel?: string
+  meetingUrl?: string
 }
 
 // ─── Seed data — today's date used for "today" entries ───────────────────────
@@ -174,6 +177,8 @@ function makeRecord(seq: number, date: Date, time: string, status: AppointmentSt
     status,
     assignedRole: t.role,
     createdAt: `${dateStr}T08:00:00`,
+    mode: seq % 3 === 0 ? 'online' : 'physical',
+    locationLabel: seq % 3 === 0 ? undefined : 'Room 204, Administrative Block',
   }
 }
 
@@ -401,7 +406,7 @@ export interface Viewer { id?: string; name?: string; role: Role }
 
 // Apply row-level visibility. When no viewer is supplied, nothing is scoped
 // (used only by internal callers that have already scoped).
-function scope(records: AppointmentRecord[], viewer?: Viewer): AppointmentRecord[] {
+export function scope(records: AppointmentRecord[], viewer?: Viewer): AppointmentRecord[] {
   if (!viewer) return records
   return records.filter(a => canViewAppointment(viewer, a))
 }
@@ -423,6 +428,9 @@ interface BackendAppointmentDto {
   subject?: string
   date?: string
   time?: string
+  mode?: 'physical' | 'online' | 'phone'
+  locationLabel?: string
+  meetingUrl?: string
   status: AppointmentStatus
   assignedRole?: Role
   submittedAt?: string
@@ -448,6 +456,9 @@ export function dtoToRecord(d: BackendAppointmentDto): AppointmentRecord {
     status:            d.status,
     assignedRole:      d.assignedRole,
     createdAt:         d.submittedAt ?? '',
+    mode:              d.mode,
+    locationLabel:     d.locationLabel,
+    meetingUrl:        d.meetingUrl,
   }
 }
 
@@ -455,7 +466,8 @@ export async function fetchTodaysAppointments(viewer?: Viewer): Promise<Appointm
   if (DATA_SOURCE === 'supabase') {
     const res = await api.get<{ appointments: BackendAppointmentDto[] }>('/appointments')
     const today = localISODate()
-    return res.appointments.map(dtoToRecord).filter(a => a.date === today)
+    const records = res.appointments.map(dtoToRecord).filter(a => a.date === today)
+    return viewer ? scope(records, viewer) : records
   }
   await delay(300)
   const today = localISODate()
@@ -465,7 +477,8 @@ export async function fetchTodaysAppointments(viewer?: Viewer): Promise<Appointm
 export async function fetchAllAppointments(viewer?: Viewer): Promise<AppointmentRecord[]> {
   if (DATA_SOURCE === 'supabase') {
     const res = await api.get<{ appointments: BackendAppointmentDto[] }>('/appointments')
-    return res.appointments.map(dtoToRecord)
+    const records = res.appointments.map(dtoToRecord)
+    return viewer ? scope(records, viewer) : records
   }
   await delay(200)
   return scope(SEED_APPOINTMENTS, viewer)

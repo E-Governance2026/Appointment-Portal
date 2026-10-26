@@ -51,7 +51,7 @@ describe('reports — computeReport (pure)', () => {
     expect(r.rejectionRate).toBeCloseTo(rejected / r.total, 5)
   })
 
-  it('computes average turnaround from the audit log', () => {
+  it('computes average and median turnaround from the audit log', () => {
     const submittedAt = '2026-05-01T09:00:00.000Z'
     const decidedAt   = '2026-05-01T13:00:00.000Z'   // 4 hours later
     const records = [{ ...SEED_APPROVALS[0], id: 'X', submittedAt, date: '2026-05-01' }]
@@ -62,6 +62,32 @@ describe('reports — computeReport (pure)', () => {
     }]
     const r = computeReport(records, events, WIDE)
     expect(r.avgTurnaroundHours).toBe(4)
+    expect(r.medianTurnaroundHours).toBe(4)
+    expect(r.decidedCount).toBe(1)
+  })
+
+  it('displays "Unspecified" when typeId or typeName is missing or null', () => {
+    const records = [
+      { ...SEED_APPROVALS[0], id: 'U1', typeId: '', typeName: '' },
+      { ...SEED_APPROVALS[1], id: 'U2', typeId: 'academic', typeName: 'Academic Consultation' },
+    ]
+    const r = computeReport(records, [], WIDE)
+    const unspec = r.byType.find(t => t.label === 'Unspecified')
+    expect(unspec).toBeDefined()
+    expect(unspec?.count).toBe(1)
+  })
+
+  it('breakdown sums equal the total appointments count', () => {
+    const r = computeReport(SEED_APPROVALS, [], WIDE)
+    const statusSum = r.statusBreakdown.reduce((sum, s) => sum + s.count, 0)
+    const deptSum = r.byDepartment.reduce((sum, d) => sum + d.count, 0)
+    const authSum = r.byAuthority.reduce((sum, a) => sum + a.count, 0)
+    const typeSum = r.byType.reduce((sum, t) => sum + t.count, 0)
+
+    expect(statusSum).toBe(r.total)
+    expect(deptSum).toBe(r.total)
+    expect(authSum).toBe(r.total)
+    expect(typeSum).toBe(r.total)
   })
 })
 

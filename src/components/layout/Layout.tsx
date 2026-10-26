@@ -61,34 +61,27 @@ export default function Layout() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: 'var(--color-cream)' }}>
-      {/* ── Desktop sidebar: sticky floating panel (gap on all sides) ── */}
+      {/* ── Desktop sidebar: full height sticky panel ── */}
       {!isMobile && (
-        <div
+        <aside
           style={{
             flexShrink: 0,
             position: 'sticky',
             top: 0,
             height: '100vh',
-            padding: 'var(--space-4)',
-            paddingRight: 0,
-            boxSizing: 'border-box',
-            display: 'flex',
-            width: `calc(${sidebarWidth} + var(--space-4))`,
+            width: sidebarWidth,
             transition: 'width var(--motion-slow) var(--ease-out)',
+            display: 'flex',
+            flexDirection: 'column',
+            margin: 0,
+            padding: 0,
+            borderRadius: 0,
+            boxShadow: 'none',
+            zIndex: 30,
           }}
         >
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              borderRadius: 'var(--radius-xl)',
-              overflow: 'hidden',
-              boxShadow: 'var(--elevation-2)',
-            }}
-          >
-            <Sidebar collapsed={collapsed} />
-          </div>
-        </div>
+          <Sidebar collapsed={collapsed} />
+        </aside>
       )}
 
       {/* ── Mobile drawer + overlay ── */}

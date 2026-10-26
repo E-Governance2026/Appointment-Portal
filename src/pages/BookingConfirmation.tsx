@@ -2,7 +2,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, RefreshCw } from 'lucide-react'
 import { fetchSubmittedAppointment } from '../data/bookingApi'
-import { APPOINTMENT_TYPES } from '../data/bookingSeeds'
 import { useBookingStore } from '../store/bookingStore'
 import StatusChip from '../components/common/StatusChip'
 
@@ -74,8 +73,6 @@ export default function BookingConfirmation() {
     )
   }
 
-  const typeName = APPOINTMENT_TYPES.find(t => t.id === record.typeId)?.name ?? record.typeName
-
   const dateDisplay = record.date
     ? new Date(record.date + 'T00:00:00').toLocaleDateString('en-IN', {
         weekday:'long', day:'numeric', month:'long', year:'numeric',
@@ -137,7 +134,6 @@ export default function BookingConfirmation() {
           <StatusChip status="submitted" size="md" />
         </div>
 
-        <Row label="Type"          value={typeName}              />
         <Row label="Purpose"       value={record.purposeLabel}   />
         <Row label="Department"    value={record.department}      />
         <Row label="Authority"     value={record.authorityName}   />
@@ -172,6 +168,12 @@ export default function BookingConfirmation() {
           Your request is waiting for approval from {record.authorityName}. You will be
           notified in the app when the status changes.
         </p>
+        {record.mode === 'online' && (
+          <p style={{ fontFamily:'var(--font-sans)', fontSize:'13px', color:'#166534',
+            margin:'6px 0 0 0', fontWeight: 500 }}>
+            📹 Online consultation: Your Google Meet link will be automatically generated and linked to your selected time slot once approved.
+          </p>
+        )}
       </div>
 
       {/* Action buttons */}

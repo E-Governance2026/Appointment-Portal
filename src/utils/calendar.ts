@@ -10,6 +10,7 @@ export interface CalendarEventInput {
   durationMinutes?: number
   details?:    string
   location?:   string
+  meetingUrl?: string
 }
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
@@ -49,8 +50,14 @@ export function googleCalendarUrl(input: CalendarEventInput): string | null {
     text:   input.title,
     dates:  `${start}/${end}`,
   })
-  if (input.details)  params.set('details', input.details)
-  if (input.location) params.set('location', input.location)
+  if (input.meetingUrl) {
+    params.set('location', input.meetingUrl)
+    const meetNote = `Join Google Meet: ${input.meetingUrl}`
+    params.set('details', input.details ? `${meetNote}\n\n${input.details}` : meetNote)
+  } else {
+    if (input.details)  params.set('details', input.details)
+    if (input.location) params.set('location', input.location)
+  }
 
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }

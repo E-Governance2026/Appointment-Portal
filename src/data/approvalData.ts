@@ -25,6 +25,7 @@ export interface ApprovalRecord {
   description:   string
   mode:          'physical' | 'online' | 'phone'
   locationLabel: string
+  meetingUrl?:   string
   documentsCount: number
   status:        AppointmentStatus
   submittedAt:   string          // ISO

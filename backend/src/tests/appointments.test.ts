@@ -87,9 +87,9 @@ describe('appointments — resolveAuthority', () => {
     expect(a?.id).toBe('auth-vm')
   })
 
-  it('resolves Shivendra sir and Jaimi sir', () => {
+  it('resolves Shivendra sir and Jaimeel sir', () => {
     expect(resolveAuthority('auth-ss')?.name).toBe('Shivendra sir')
-    expect(resolveAuthority('auth-ap')?.name).toBe('Jaimi sir')
+    expect(resolveAuthority('auth-ap')?.name).toBe('Jaimeel sir')
   })
 
   it('derives a type from the chosen authority (first handled type)', () => {

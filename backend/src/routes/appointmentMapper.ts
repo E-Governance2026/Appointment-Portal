@@ -7,6 +7,7 @@
 
 import type { AppointmentStatus } from '../domain/statusMachine.js'
 import type { Role } from '../types.js'
+import { generateGoogleMeetLink } from '../domain/googleMeet.js'
 
 // The row shape as selected from the `appointments` table. Columns that are
 // nullable in SQL are nullable here.
@@ -68,6 +69,7 @@ export interface AppointmentDto {
   updatedAt: string
   proposedDate?: string
   proposedTime?: string
+  meetingUrl?: string
   checkedInAt?: string
   checkedOutAt?: string
 }
@@ -92,7 +94,7 @@ export function toAppointmentDto(row: AppointmentRow): AppointmentDto {
     requesterInitials: row.requester_initials ?? '',
     requesterCategory: row.requester_category ?? '',
     typeId:            row.type_id ?? '',
-    typeName:          row.type_name ?? '',
+    typeName:          (row.type_name && row.type_name.trim()) ? row.type_name.trim() : 'Unspecified',
     purposeLabel:      row.purpose_label ?? '',
     department:        row.department ?? '',
     authorityId:       row.authority_id ?? '',
@@ -118,5 +120,10 @@ export function toAppointmentDto(row: AppointmentRow): AppointmentDto {
   if (row.proposed_time)  dto.proposedTime  = row.proposed_time
   if (row.checked_in_at)  dto.checkedInAt   = row.checked_in_at
   if (row.checked_out_at) dto.checkedOutAt  = row.checked_out_at
+  if (row.mode === 'online') {
+    dto.meetingUrl = (row.location_label && row.location_label.startsWith('http'))
+      ? row.location_label
+      : generateGoogleMeetLink(row.id)
+  }
   return dto
 }

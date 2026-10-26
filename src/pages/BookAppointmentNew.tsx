@@ -6,6 +6,7 @@ import Button from '../components/ui/Button'
 import { AUTHORITIES, MOCK_REQUESTER, canBook } from '../data/bookingSeeds'
 import { submitAppointment, type BookingDraft } from '../data/bookingApi'
 import AccessDenied from './AccessDenied'
+import TimeSlotPicker from '../components/common/TimeSlotPicker'
 
 // ─── Revised booking flow (per department) ────────────────────────────────────
 // Three steps, no appointment-type selection:
@@ -32,7 +33,7 @@ interface BookWithOption {
 const BOOK_WITH_OPTIONS: BookWithOption[] = [
   { key: 'department', label: 'Department',     sublabel: 'A general request to the department', initials: 'DP', authorityId: 'auth-vm' },
   { key: 'auth-ss',    label: 'Shivendra sir',  sublabel: 'Academic Affairs',                    initials: 'SS', authorityId: 'auth-ss' },
-  { key: 'auth-ap',    label: 'Jaimi sir',      sublabel: 'Human Resources',                     initials: 'JS', authorityId: 'auth-ap' },
+  { key: 'auth-ap',    label: 'Jaimeel sir',      sublabel: 'Human Resources',                     initials: 'JS', authorityId: 'auth-ap' },
 ]
 
 function fmtTime(hhmm: string): string {
@@ -59,6 +60,7 @@ export default function BookAppointmentNew() {
   const [time, setTime] = useState('')
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
+  const [mode, setMode] = useState<'physical' | 'online'>('physical')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -118,7 +120,7 @@ export default function BookAppointmentNew() {
       time,
       subject: subject.trim(),
       description: description.trim(),
-      mode: 'physical',
+      mode,
       locationId: '',
       participantCount: null,
       supportingReference: '',
@@ -215,22 +217,27 @@ export default function BookAppointmentNew() {
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <label htmlFor="date" style={labelStyle}>Preferred date</label>
-                <input id="date" type="date" className="input" value={date} min={todayISO()}
-                  aria-invalid={!!errors.date}
-                  onChange={e => { setDate(e.target.value); setErrors({}) }} />
-                {errors.date && <p style={errStyle}>{errors.date}</p>}
-              </div>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <label htmlFor="time" style={labelStyle}>Preferred time</label>
-                <input id="time" type="time" className="input" value={time}
-                  aria-invalid={!!errors.time}
-                  onChange={e => { setTime(e.target.value); setErrors({}) }} />
-                {errors.time && <p style={errStyle}>{errors.time}</p>}
-              </div>
+            <div>
+              <label htmlFor="date" style={labelStyle}>Preferred date</label>
+              <input id="date" type="date" className="input" value={date} min={todayISO()}
+                aria-invalid={!!errors.date}
+                onChange={e => { setDate(e.target.value); setErrors({}) }} />
+              {date && (
+                <p style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>
+                  {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', {
+                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                  })}
+                </p>
+              )}
+              {errors.date && <p style={errStyle}>{errors.date}</p>}
             </div>
+
+            <TimeSlotPicker
+              value={time}
+              onChange={val => { setTime(val); setErrors({}) }}
+              label="Preferred time slot"
+              error={errors.time}
+            />
 
             {(date || time) && (
               <button type="button" className="btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}
@@ -262,11 +269,31 @@ export default function BookAppointmentNew() {
               {errors.description && <p style={errStyle}>{errors.description}</p>}
             </div>
 
+            {/* Meeting method (Online / Offline) dropdown */}
+            <div>
+              <label htmlFor="meeting-method" style={labelStyle}>Meeting method<span style={reqStyle}> *</span></label>
+              <select
+                id="meeting-method"
+                className="input"
+                value={mode}
+                onChange={e => setMode(e.target.value as 'physical' | 'online')}
+                style={{ width: '100%', cursor: 'pointer', backgroundColor: 'var(--color-ivory)' }}
+              >
+                <option value="physical">Offline (In-Person)</option>
+                <option value="online">Online</option>
+              </select>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', margin: '6px 0 0 0' }}>
+                {mode === 'physical'
+                  ? 'In-person meeting at the authority\'s designated department office.'
+                  : 'Online video meeting link will be shared once approved.'}
+              </p>
+            </div>
+
             {/* Summary */}
             <div style={{ padding: '12px 14px', backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-sage)', borderRadius: 'var(--radius-md)' }}>
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', margin: '0 0 6px 0' }}>Summary</p>
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', margin: 0, lineHeight: 1.6 }}>
-                Appointment with <strong>{withLabel}</strong>.{' '}
+                Appointment with <strong>{withLabel}</strong> ({mode === 'online' ? 'Online' : 'Offline / In-Person'}).{' '}
                 {date && time ? <>Preferred {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })} at {fmtTime(time)}.</> : 'Time to be proposed by the authority.'}
               </p>
             </div>

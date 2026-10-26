@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, CalendarPlus, Eye, XCircle,
+  Search, CalendarPlus, Eye, XCircle, Video,
   Calendar, Clock, Building2, User, SlidersHorizontal, Upload,
 } from 'lucide-react'
 import StatusBadge from '../components/common/StatusBadge'
-import { SEED_APPOINTMENTS, fetchAllAppointments, type AppointmentRecord, type AppointmentStatus } from '../data/mockAppointments'
+import {
+  SEED_APPOINTMENTS,
+  fetchAllAppointments,
+  scope,
+  type AppointmentRecord,
+  type AppointmentStatus,
+  type Viewer,
+} from '../data/mockAppointments'
+import { useAuthStore } from '../store/authStore'
+import { getAppointmentMeetLink } from '../utils/googleMeet'
 
 // Under the real backend the list comes from GET /appointments (scoped to the
 // signed-in user); under mock it starts from the seed.
@@ -91,7 +100,7 @@ function AppointmentCard({
         ))}
       </div>
 
-      {/* Type tag */}
+      {/* Type & Method tags */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.875rem' }}>
         <span
           style={{
@@ -105,6 +114,21 @@ function AppointmentCard({
         >
           {appt.appointmentType}
         </span>
+        {appt.mode && (
+          <span
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: '12px',
+              padding: '0.15rem 0.5rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: appt.mode === 'online' ? '#E3EEF8' : 'var(--color-sage)',
+              color: appt.mode === 'online' ? '#1F5FA6' : 'var(--color-charcoal)',
+              fontWeight: 500,
+            }}
+          >
+            {appt.mode === 'online' ? 'Online' : 'In-Person'}
+          </span>
+        )}
       </div>
 
       {/* Divider */}
@@ -131,6 +155,30 @@ function AppointmentCard({
         >
           <Eye size={12} aria-hidden="true" /> View
         </button>
+
+        {appt.mode === 'online' && ['approved', 'confirmed'].includes(appt.status) && (
+          <a
+            href={getAppointmentMeetLink(appt) || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: '13px',
+              color: '#166534',
+              backgroundColor: '#DCFCE7',
+              border: '1px solid #86EFAC',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.3rem 0.75rem',
+              textDecoration: 'none',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#BBF7D0')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#DCFCE7')}
+          >
+            <Video size={12} aria-hidden="true" /> Join Meet
+          </a>
+        )}
 
         {needsInfo && (
           <button
@@ -184,7 +232,11 @@ function AppointmentCard({
 // ─── My Appointments page ─────────────────────────────────────────────────────
 export default function MyAppointments() {
   const navigate = useNavigate()
-  const [appointments, setAppointments] = useState<AppointmentRecord[]>(USE_BACKEND ? [] : SEED_APPOINTMENTS)
+  const user = useAuthStore(s => s.user)
+  const viewer: Viewer = { id: user?.id, name: user?.name, role: user?.role ?? 'requester' }
+  const [appointments, setAppointments] = useState<AppointmentRecord[]>(() =>
+    USE_BACKEND ? [] : scope(SEED_APPOINTMENTS, viewer),
+  )
   const [activeTab, setActiveTab]       = useState<FilterTab>('all')
   const [search, setSearch]             = useState('')
   const [dateFrom, setDateFrom]         = useState('')
@@ -196,13 +248,12 @@ export default function MyAppointments() {
 
   // Load the live list under the real backend (scoped to the signed-in user).
   useEffect(() => {
-    if (!USE_BACKEND) return
     let active = true
-    fetchAllAppointments()
+    fetchAllAppointments(viewer)
       .then(rows => { if (active) setAppointments(rows) })
       .catch(() => { if (active) setAppointments([]) })
     return () => { active = false }
-  }, [])
+  }, [viewer.id, viewer.role, viewer.name])
 
   // Filter
   const filtered = appointments.filter(appt => {

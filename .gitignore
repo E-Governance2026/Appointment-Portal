@@ -32,3 +32,4 @@ backend/.env.*
 !backend/.env.example
 backend/dist
 backend/node_modules
+backend/p.txt

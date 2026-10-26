@@ -25,7 +25,7 @@ import { api } from '../services/apiClient'
 
 // Which data source backs the booking submit (same flag the service uses).
 const DATA_SOURCE: 'mock' | 'supabase' =
-  (import.meta.env.VITE_DATA_SOURCE as 'mock' | 'supabase') ?? 'mock'
+  import.meta.env.MODE === 'test' ? 'mock' : (import.meta.env.VITE_API_BASE_URL ? 'supabase' : 'mock')
 
 // The subset of the backend appointment DTO the booking submit reads back.
 interface BackendAppointment {
@@ -466,7 +466,7 @@ export async function submitAppointment(
     // map to the SubmittedAppointment shape the confirmation screen reads.
     const res = await api.post<{ appointment: BackendAppointment }>(
       '/appointments',
-      { bookWith: draft.authorityId, date: draft.date, time: draft.time, subject: draft.subject, description: draft.description },
+      { bookWith: draft.authorityId, date: draft.date, time: draft.time, subject: draft.subject, description: draft.description, mode: draft.mode },
       { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     const a = res.appointment
@@ -596,6 +596,42 @@ export async function submitAppointment(
 
 // ─── ENDPOINT: fetchSubmittedAppointment ─────────────────────────────────────
 export async function fetchSubmittedAppointment(id: string): Promise<SubmittedAppointment> {
+  if (DATA_SOURCE === 'supabase') {
+    // Under the real backend the appointment was stored in Supabase, not in
+    // the in-memory store. Read it from GET /appointments/:id and map to the
+    // SubmittedAppointment shape the confirmation page reads.
+    const res = await api.get<{ appointment: BackendAppointment }>(`/appointments/${encodeURIComponent(id)}`)
+    const a = res.appointment
+    return {
+      id:                   a.id,
+      draftId:              '',
+      status:               'submitted',
+      typeId:               a.typeId,
+      typeName:             a.typeName,
+      purposeId:            '',
+      purposeLabel:         a.purposeLabel,
+      authorityId:          a.authorityId,
+      authorityName:        a.authorityName,
+      authorityDesignation: '',
+      department:           a.department,
+      date:                 a.date,
+      time:                 a.time,
+      subject:              a.subject,
+      description:          a.description,
+      mode:                 a.mode,
+      locationId:           '',
+      locationLabel:        a.locationLabel,
+      participantCount:     null,
+      supportingReference:  '',
+      documents:            [],
+      requesterId:          a.requesterId ?? '',
+      requesterName:        a.requester,
+      requesterEmployeeId:  '',
+      requesterDepartment:  '',
+      submittedAt:          a.submittedAt,
+      timeline:             [{ event: 'Submitted', timestamp: a.submittedAt, actor: a.requester }],
+    }
+  }
   await delay(200)
   const record = SUBMIT_STORE.get(id)
   if (!record) throw new ApiError('not_found', `Appointment ${id} not found.`)

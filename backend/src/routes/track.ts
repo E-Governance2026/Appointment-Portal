@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { getSupabase } from '../lib/supabase.js'
 import { HttpError } from '../lib/httpError.js'
+import { generateGoogleMeetLink } from '../domain/googleMeet.js'
 
 // ─── Public track route ───────────────────────────────────────────────────────
 // GET /track/:id — look up an appointment's public status by its reference id.
@@ -14,7 +15,7 @@ trackRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) 
     const supabase = getSupabase()
     const { data, error } = await supabase
       .from('appointments')
-      .select('id, status, purpose_label, type_name, department, authority_name, date, time, submitted_at')
+      .select('id, status, purpose_label, type_name, department, authority_name, date, time, submitted_at, mode, location_label')
       .eq('id', req.params.id)
       .maybeSingle()
     if (error) throw new HttpError('internal_error', error.message)
@@ -30,6 +31,9 @@ trackRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) 
         authorityName: data.authority_name ?? '',
         date:          data.date ?? '',
         time:          data.time ?? '',
+        mode:          data.mode ?? 'physical',
+        locationLabel: data.location_label ?? '',
+        meetingUrl:    data.mode === 'online' ? ((data.location_label && data.location_label.startsWith('http')) ? data.location_label : generateGoogleMeetLink(data.id)) : undefined,
         submittedAt:   data.submitted_at,
       },
     })

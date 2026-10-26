@@ -8,6 +8,8 @@ import { useAuthStore } from '../../store/authStore'
 import { hasPermission } from '../../config/permissions'
 import { allowedNextStatuses } from '../../config/statusMachine'
 import { googleCalendarUrl } from '../../utils/calendar'
+import GoogleMeetCard from '../common/GoogleMeetCard'
+import { getAppointmentMeetLink } from '../../utils/googleMeet'
 import {
   useApproval, useAppointmentTimeline, useApprove, useReject, useRequestInfo,
   useConfirm, useAddRemark, useProposeReschedule, useRespondReschedule,
@@ -73,10 +75,11 @@ export default function ApprovalDetailPanel({ id, onClose }: ApprovalDetailPanel
 
   // An action button shows only if: the role has permission AND the status
   // machine allows the resulting transition (or it is a non-transition action).
-  const showApprove    = hasPermission(role, 'appointment.approve') && nexts.includes('approved')
+  // Unified approve & confirm: one single "Approve" button handles approving and confirming.
+  const showApprove    = hasPermission(role, 'appointment.approve') &&
+    (nexts.includes('approved') || rec.status === 'submitted' || rec.status === 'approved')
   const showReject     = hasPermission(role, 'appointment.reject')  && nexts.includes('rejected')
   const showInfo       = hasPermission(role, 'appointment.requestInfo') && nexts.includes('additional-info')
-  const showConfirm    = hasPermission(role, 'appointment.confirm') && nexts.includes('confirmed')
   const showReschedule = hasPermission(role, 'appointment.proposeReschedule') && nexts.includes('rescheduled')
   const showCancel     = (hasPermission(role, 'appointment.cancel') || hasPermission(role, 'appointment.requestCancel')) && nexts.includes('cancelled')
   const showNotReported = hasPermission(role, 'appointment.markNotReported') && nexts.includes('not-reported')
@@ -84,7 +87,7 @@ export default function ApprovalDetailPanel({ id, onClose }: ApprovalDetailPanel
   // Requester response to a pending reschedule proposal.
   const showRespond    = rec.status === 'rescheduled' && hasPermission(role, 'appointment.respondReschedule')
 
-  const anyAction = showApprove || showReject || showInfo || showConfirm ||
+  const anyAction = showApprove || showReject || showInfo ||
     showReschedule || showCancel || showNotReported || showRemark || showRespond
   const busy = approve.isPending || reject.isPending || requestInfo.isPending ||
     confirm.isPending || addRemark.isPending || reschedule.isPending ||
@@ -163,8 +166,27 @@ export default function ApprovalDetailPanel({ id, onClose }: ApprovalDetailPanel
           />
         )}
 
-        {/* Google Calendar reminder — available once confirmed */}
-        {rec.status === 'confirmed' && rec.date && rec.time && (() => {
+        {/* Google Meet Consultation Card */}
+        {rec.mode === 'online' && (
+          <GoogleMeetCard
+            appointmentId={rec.id}
+            meetUrl={getAppointmentMeetLink(rec) || ''}
+            date={rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : undefined}
+            time={rec.time ? fmtTime(rec.time) : undefined}
+            rawDate={rec.date}
+            rawTime={rec.time}
+            subject={rec.subject}
+            authorityName={rec.authorityName}
+            department={rec.department}
+            requesterName={rec.requester}
+            status={rec.status}
+            showCalendarButton={rec.status === 'confirmed'}
+            appointmentRecord={rec}
+          />
+        )}
+
+        {/* Google Calendar reminder — available once confirmed for physical */}
+        {rec.mode !== 'online' && rec.status === 'confirmed' && rec.date && rec.time && (() => {
           const url = googleCalendarUrl({
             title: `Appointment: ${rec.subject}`,
             date: rec.date, time: rec.time,
@@ -230,18 +252,15 @@ export default function ApprovalDetailPanel({ id, onClose }: ApprovalDetailPanel
           {showApprove && (
             <button className="btn-primary" disabled={busy} style={{ fontSize: '13px' }}
               onClick={() => {
-                // If the requester left the slot open, the authority provides it
-                // at approval; otherwise approve the existing slot directly.
-                if (!rec.date || !rec.time) setDialog('approve-slot')
-                else approve.mutate({ id: rec.id }, { onError: handleError })
+                if (rec.status === 'approved') {
+                  // Legacy approved requests: clicking Approve completes confirmation immediately
+                  confirm.mutate({ id: rec.id }, { onError: handleError })
+                } else {
+                  // Submitted requests: open dialog to select/confirm date & time, then approve & confirm
+                  setDialog('approve-slot')
+                }
               }}>
               <Check size={14} aria-hidden="true" /> Approve
-            </button>
-          )}
-          {showConfirm && (
-            <button className="btn-primary" disabled={busy} style={{ fontSize: '13px' }}
-              onClick={() => confirm.mutate({ id: rec.id }, { onError: handleError })}>
-              <CheckCircle2 size={14} aria-hidden="true" /> Confirm
             </button>
           )}
           {showRespond && (
@@ -359,13 +378,15 @@ export default function ApprovalDetailPanel({ id, onClose }: ApprovalDetailPanel
       )}
       {dialog === 'approve-slot' && (
         <RescheduleDialog
-          title="Approve and set a time"
-          description="The requester left the time open. Choose a date and time to approve this request. The requester is notified when you confirm."
-          confirmLabel="Approve with this time"
+          title="Approve appointment"
+          description="Select the date and time to approve and confirm this request. The appointment will be confirmed and the requester notified immediately with calendar and meeting details."
+          confirmLabel="Approve"
           currentDate={rec.date}
           currentTime={rec.time}
+          mode={rec.mode}
+          currentMeetingUrl={rec.meetingUrl || (rec.mode === 'online' && rec.locationLabel?.startsWith('http') ? rec.locationLabel : '')}
           submitting={approve.isPending}
-          onConfirm={(date, time, note) => approve.mutate({ id: rec.id, date, time, note }, {
+          onConfirm={(date, time, note, meetingUrl) => approve.mutate({ id: rec.id, date, time, note, meetingUrl, confirm: true }, {
             onSuccess: () => setDialog(null),
             onError: (e) => { handleError(e); setDialog(null) },
           })}

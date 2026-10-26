@@ -20,7 +20,17 @@ import { assertTransition } from '../config/statusMachine'
 import { hasPermission, type Role, type Action } from '../config/permissions'
 import { recordEvent, getTimeline, getAllEvents, type AuditEvent } from '../data/auditLog'
 import { SEED_AVAILABILITY, type Availability } from '../data/availabilityData'
-import { computeReport, type ReportFilters, type ReportSummary } from '../data/reportTypes'
+import {
+  computeReport,
+  applyFilters,
+  type ReportFilters,
+  type ReportSummary,
+  type TableReportResult,
+  type RegisterRow,
+  type PendingRow,
+  type TurnaroundRow,
+  type ChangeRow,
+} from '../data/reportTypes'
 import {
   seedMasterData, sameName, isNonEmpty,
   type MasterData, type Department, type MasterAppointmentType, type MasterAuthority,
@@ -30,12 +40,15 @@ import {
   type ManagedUser,
 } from '../data/userData'
 import { ROLES } from '../config/permissions'
-import { api } from './apiClient'
+import { api, baseUrl, getToken } from './apiClient'
+import { generateGoogleMeetLink } from '../utils/googleMeet'
+import { sendAppointmentConfirmationEmail } from './emailService'
 
 // ─── Config: which implementation backs this service ─────────────────────────
 // Flip to 'supabase' when the backend is wired. Only this module reads it.
+// Automated test suite always runs on the mock path (see CUTOVER.md).
 const DATA_SOURCE: 'mock' | 'supabase' =
-  (import.meta.env.VITE_DATA_SOURCE as 'mock' | 'supabase') ?? 'mock'
+  import.meta.env.MODE === 'test' ? 'mock' : (import.meta.env.VITE_API_BASE_URL ? 'supabase' : 'mock')
 
 // ─── In-memory store (mock implementation) ────────────────────────────────────
 const STORE: ApprovalRecord[] = SEED_APPROVALS.map(r => ({ ...r }))
@@ -161,23 +174,36 @@ function applyTransition(
 export interface ApproveOptions {
   note?: string
   slot?: { date: string; time: string }
+  meetingUrl?: string
+  confirm?: boolean
 }
 
 export async function approveAppointment(
   id: string, actor: Actor, opts: ApproveOptions | string = {},
 ): Promise<ApprovalRecord> {
+  const isConfirming = typeof opts === 'string' ? false : (opts.confirm === true)
   if (DATA_SOURCE === 'supabase') {
     const body = typeof opts === 'string' ? { note: opts } : opts
     const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/approve`, body)
+    if (body.confirm) {
+      try {
+        sendAppointmentConfirmationEmail(res.appointment)
+      } catch (err) {
+        console.warn('Confirmation email dispatch warning:', err)
+      }
+    }
     return res.appointment
   }
   await delay(300)
   requirePermission(actor, 'appointment.approve')
   // Backward compatible: a bare string is treated as the note.
-  const { note, slot } = typeof opts === 'string' ? { note: opts, slot: undefined } : opts
+  const { note, slot, meetingUrl } = typeof opts === 'string' ? { note: opts, slot: undefined, meetingUrl: undefined } : opts
 
   const rec = find(id)
-  if (rec.status === 'approved') {
+  if (rec.status === 'confirmed') {
+    throw new ServiceError('duplicate', 'This request has already been confirmed.')
+  }
+  if (rec.status === 'approved' && !isConfirming) {
     throw new ServiceError('duplicate', 'This request has already been approved.')
   }
 
@@ -196,10 +222,40 @@ export async function approveAppointment(
     rec.time = slot.time
   }
 
+  if (meetingUrl && meetingUrl.trim()) {
+    rec.meetingUrl = meetingUrl.trim()
+    rec.locationLabel = meetingUrl.trim()
+  } else if (rec.mode === 'online' && !rec.meetingUrl) {
+    rec.meetingUrl = generateGoogleMeetLink(rec.id)
+    rec.locationLabel = rec.meetingUrl
+  }
+
   const slotDetail = `Scheduled for ${rec.date} at ${rec.time}.`
-  const detail = note ? `${slotDetail} ${note}` : slotDetail
-  applyTransition(rec, 'approved', actor, 'approved', `Approved by ${actor.name}.`, detail)
-  rec.assignedStage = 'Confirmation pending'
+  const meetNote = rec.mode === 'online' && rec.meetingUrl ? ` Google Meet link: ${rec.meetingUrl}.` : ''
+  const detail = note ? `${slotDetail}${meetNote} ${note}` : `${slotDetail}${meetNote}`
+
+  if (rec.status !== 'approved') {
+    applyTransition(rec, 'approved', actor, 'approved', `Approved by ${actor.name}.`, detail)
+  }
+
+  if (isConfirming) {
+    applyTransition(rec, 'confirmed', actor, 'confirmed', `Confirmed by ${actor.name}.`)
+    rec.assignedStage = 'Confirmed'
+    recordEvent({
+      appointmentId: rec.id, action: 'notification-sent',
+      actorId: 'system', actorName: 'System', actorRole: 'system',
+      summary: 'Confirmation sent to the requester by website and email.',
+      detail: `Appointment confirmed for ${rec.date} at ${rec.time}.${meetNote}`,
+    })
+    try {
+      sendAppointmentConfirmationEmail(rec)
+    } catch (err) {
+      console.warn('Confirmation email dispatch warning:', err)
+    }
+  } else {
+    rec.assignedStage = 'Confirmation pending'
+  }
+
   return { ...rec }
 }
 
@@ -257,14 +313,52 @@ export async function confirmAppointment(id: string, actor: Actor): Promise<Appr
   if (!rec.date || !rec.time) {
     throw new ServiceError('illegal_transition', 'A date and time must be set before confirming.')
   }
+  if (rec.mode === 'online') {
+    if (!rec.meetingUrl) {
+      rec.meetingUrl = generateGoogleMeetLink(rec.id)
+    }
+    rec.locationLabel = rec.meetingUrl
+  }
+
   applyTransition(rec, 'confirmed', actor, 'confirmed', `Confirmed by ${actor.name}.`)
   rec.assignedStage = 'Confirmed'
   // Record the confirmation notification (website + email).
+  const meetNote = rec.mode === 'online' && rec.meetingUrl ? ` Google Meet link: ${rec.meetingUrl}.` : ''
   recordEvent({
     appointmentId: rec.id, action: 'notification-sent',
     actorId: 'system', actorName: 'System', actorRole: 'system',
     summary: 'Confirmation sent to the requester by website and email.',
-    detail: `Appointment confirmed for ${rec.date} at ${rec.time}.`,
+    detail: `Appointment confirmed for ${rec.date} at ${rec.time}.${meetNote}`,
+  })
+  try {
+    sendAppointmentConfirmationEmail(rec)
+  } catch (err) {
+    console.warn('Confirmation email dispatch warning:', err)
+  }
+  return { ...rec }
+}
+
+/** Update Google Meet / online meeting URL directly */
+export async function updateMeetingUrl(id: string, actor: Actor, meetingUrl: string): Promise<ApprovalRecord> {
+  const cleanUrl = meetingUrl.trim()
+  if (DATA_SOURCE === 'supabase') {
+    const res = await api.post<{ appointment: ApprovalRecord }>(`/appointments/${id}/meeting-url`, { meetingUrl: cleanUrl })
+    return res.appointment
+  }
+  await delay(200)
+  const rec = find(id)
+  rec.meetingUrl = cleanUrl
+  if (rec.mode === 'online') {
+    rec.locationLabel = cleanUrl
+  }
+  recordEvent({
+    appointmentId: rec.id,
+    action: 'internal-remark',
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    summary: `Google Meet link updated by ${actor.name}.`,
+    detail: cleanUrl,
   })
   return { ...rec }
 }
@@ -615,12 +709,18 @@ export async function updateAvailability(actor: Actor, next: Availability): Prom
  * actor's role (own scope). Requesters have no reporting permission.
  */
 export async function fetchReport(actor: Actor, filters: ReportFilters): Promise<ReportSummary> {
-  if (DATA_SOURCE === 'supabase') {
+  if (DATA_SOURCE === 'supabase' && getToken()) {
     const q = new URLSearchParams({ from: filters.from, to: filters.to })
+    if (filters.dateBasis)   q.set('dateBasis', filters.dateBasis)
     if (filters.department)  q.set('department', filters.department)
     if (filters.authorityId) q.set('authorityId', filters.authorityId)
-    if (filters.status)      q.set('status', filters.status)
-    const res = await api.get<{ report: ReportSummary }>(`/reports?${q.toString()}`)
+    if (filters.typeId)      q.set('typeId', filters.typeId)
+    if (filters.status) {
+      const s = Array.isArray(filters.status) ? filters.status.join(',') : filters.status
+      if (s) q.set('status', s)
+    }
+    if (filters.search)      q.set('search', filters.search)
+    const res = await api.get<{ report: ReportSummary }>(`/api/reports/overview?${q.toString()}`)
     return res.report
   }
   await delay(250)
@@ -636,6 +736,398 @@ export async function fetchReport(actor: Actor, filters: ReportFilters): Promise
     : STORE.filter(rec => visibleTo(actor, rec))
 
   return computeReport(scope.map(r => ({ ...r })), getAllEvents(), filters)
+}
+
+function formatDurationHours(hours: number): string {
+  if (!hours || hours <= 0) return '0 min'
+  if (hours >= 24) {
+    const d = Math.floor(hours / 24)
+    const remH = Math.round(hours % 24)
+    return remH > 0 ? `${d} d ${remH} h` : `${d} d`
+  }
+  const h = Math.floor(hours)
+  const m = Math.round((hours - h) * 60)
+  if (h === 0) return `${m} min`
+  if (m === 0) return `${h} h`
+  return `${h} h ${m} min`
+}
+
+function mockRegisterReport(
+  records: ApprovalRecord[],
+  filters: ReportFilters,
+  page = 1,
+  pageSize = 10,
+  sortBy = 'submittedAt',
+  sortOrder: 'asc' | 'desc' = 'desc',
+): TableReportResult<RegisterRow> {
+  const filtered = applyFilters(records, filters)
+  const rows: RegisterRow[] = filtered.map(r => ({
+    id: r.id,
+    requester: r.requester,
+    requesterCategory: r.requesterCategory || 'Staff',
+    department: r.department || 'Unspecified',
+    authorityName: r.authorityName || 'Unspecified',
+    typeName: (r.typeName && r.typeName.trim()) ? r.typeName.trim() : 'Unspecified',
+    date: r.date || '',
+    time: r.time || '',
+    status: r.status,
+    submittedAt: r.submittedAt,
+  }))
+
+  rows.sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'id') cmp = a.id.localeCompare(b.id)
+    else if (sortBy === 'requester') cmp = a.requester.localeCompare(b.requester)
+    else if (sortBy === 'department') cmp = a.department.localeCompare(b.department)
+    else if (sortBy === 'authorityName') cmp = a.authorityName.localeCompare(b.authorityName)
+    else if (sortBy === 'typeName') cmp = a.typeName.localeCompare(b.typeName)
+    else if (sortBy === 'date') cmp = (a.date || '').localeCompare(b.date || '')
+    else if (sortBy === 'status') cmp = a.status.localeCompare(b.status)
+    else cmp = a.submittedAt.localeCompare(b.submittedAt)
+    if (cmp === 0) cmp = a.id.localeCompare(b.id)
+    return sortOrder === 'desc' ? -cmp : cmp
+  })
+
+  const start = (page - 1) * pageSize
+  return {
+    rows: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  }
+}
+
+function mockPendingReport(
+  records: ApprovalRecord[],
+  filters: ReportFilters,
+  page = 1,
+  pageSize = 10,
+  sortBy = 'waitingTime',
+  sortOrder: 'asc' | 'desc' = 'desc',
+): TableReportResult<PendingRow> {
+  const filtered = applyFilters(records, filters).filter(r =>
+    ['submitted', 'additional-info'].includes(r.status),
+  )
+  const now = Date.now()
+  const rows: PendingRow[] = filtered.map(r => {
+    const subTime = new Date(r.submittedAt).getTime()
+    const diffHours = Math.max(0, (now - subTime) / (1000 * 60 * 60))
+    return {
+      id: r.id,
+      requester: r.requester,
+      typeName: (r.typeName && r.typeName.trim()) ? r.typeName.trim() : 'Unspecified',
+      authorityName: r.authorityName || 'Unspecified',
+      submittedAt: r.submittedAt,
+      waitingTimeHours: diffHours,
+      waitingTime: formatDurationHours(diffHours),
+      status: r.status,
+    }
+  })
+  rows.sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'submittedAt') cmp = a.submittedAt.localeCompare(b.submittedAt)
+    else if (sortBy === 'requester') cmp = a.requester.localeCompare(b.requester)
+    else if (sortBy === 'typeName') cmp = a.typeName.localeCompare(b.typeName)
+    else cmp = a.waitingTimeHours - b.waitingTimeHours
+    if (cmp === 0) cmp = a.id.localeCompare(b.id)
+    return sortOrder === 'desc' ? -cmp : cmp
+  })
+  const start = (page - 1) * pageSize
+  return {
+    rows: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  }
+}
+
+function mockTurnaroundReport(
+  records: ApprovalRecord[],
+  events: AuditEvent[],
+  filters: ReportFilters,
+  page = 1,
+  pageSize = 10,
+  sortBy = 'decidedAt',
+  sortOrder: 'asc' | 'desc' = 'desc',
+): TableReportResult<TurnaroundRow> {
+  const filtered = applyFilters(records, filters)
+  const DECISION = new Set(['approved', 'rejected'])
+  const byAppt = new Map<string, AuditEvent[]>()
+  for (const e of events) {
+    const list = byAppt.get(e.appointmentId) ?? []
+    list.push(e)
+    byAppt.set(e.appointmentId, list)
+  }
+  const rows: TurnaroundRow[] = []
+  const hoursList: number[] = []
+
+  for (const r of filtered) {
+    const evs = (byAppt.get(r.id) ?? [])
+      .filter(e => DECISION.has(e.action))
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    const first = evs[0]
+    if (!first) continue
+    const start = new Date(r.submittedAt).getTime()
+    const end = new Date(first.timestamp).getTime()
+    const durationHours = Math.max(0, (end - start) / (1000 * 60 * 60))
+    hoursList.push(durationHours)
+    rows.push({
+      id: r.id,
+      typeName: (r.typeName && r.typeName.trim()) ? r.typeName.trim() : 'Unspecified',
+      authorityName: r.authorityName || 'Unspecified',
+      submittedAt: r.submittedAt,
+      decidedAt: first.timestamp,
+      decision: first.action as 'approved' | 'rejected',
+      durationHours,
+      timeToDecide: formatDurationHours(durationHours),
+      decidedBy: first.actorName || 'Authority',
+    })
+  }
+
+  rows.sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'durationHours' || sortBy === 'timeToDecide') cmp = a.durationHours - b.durationHours
+    else if (sortBy === 'submittedAt') cmp = a.submittedAt.localeCompare(b.submittedAt)
+    else if (sortBy === 'decision') cmp = a.decision.localeCompare(b.decision)
+    else if (sortBy === 'typeName') cmp = a.typeName.localeCompare(b.typeName)
+    else cmp = a.decidedAt.localeCompare(b.decidedAt)
+    if (cmp === 0) cmp = a.id.localeCompare(b.id)
+    return sortOrder === 'desc' ? -cmp : cmp
+  })
+
+  const n = hoursList.length
+  let avgHours = 0
+  let medianHours = 0
+  let maxHours = 0
+  if (n > 0) {
+    avgHours = hoursList.reduce((acc, h) => acc + h, 0) / n
+    maxHours = Math.max(...hoursList)
+    const sorted = [...hoursList].sort((a, b) => a - b)
+    const mid = Math.floor(n / 2)
+    medianHours = n % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+  }
+
+  const start = (page - 1) * pageSize
+  return {
+    rows: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+    summary: {
+      average: formatDurationHours(avgHours),
+      median: formatDurationHours(medianHours),
+      longest: formatDurationHours(maxHours),
+      decidedRequests: n,
+    },
+  }
+}
+
+function mockChangesReport(
+  records: ApprovalRecord[],
+  events: AuditEvent[],
+  filters: ReportFilters,
+  page = 1,
+  pageSize = 10,
+  sortBy = 'changedOn',
+  sortOrder: 'asc' | 'desc' = 'desc',
+): TableReportResult<ChangeRow> {
+  const filtered = applyFilters(records, filters)
+  const CHANGE_ACTIONS = new Set(['reschedule-proposed', 'reschedule-accepted', 'cancelled'])
+  const byAppt = new Map<string, AuditEvent[]>()
+  for (const e of events) {
+    const list = byAppt.get(e.appointmentId) ?? []
+    list.push(e)
+    byAppt.set(e.appointmentId, list)
+  }
+  const rows: ChangeRow[] = []
+  for (const r of filtered) {
+    const evs = (byAppt.get(r.id) ?? [])
+      .filter(e => CHANGE_ACTIONS.has(e.action))
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    if (evs.length > 0) {
+      for (const ev of evs) {
+        const isCancel = ev.action === 'cancelled'
+        rows.push({
+          id: r.id,
+          typeName: (r.typeName && r.typeName.trim()) ? r.typeName.trim() : 'Unspecified',
+          change: isCancel ? 'Cancelled' : 'Rescheduled',
+          initiatedBy: ev.actorName || 'Staff',
+          originalTime: r.date && r.time ? `${r.date} ${r.time}` : 'Not scheduled',
+          newTime: isCancel ? '—' : (r.proposedDate && r.proposedTime ? `${r.proposedDate} ${r.proposedTime}` : (r.date && r.time ? `${r.date} ${r.time}` : '—')),
+          reason: ev.detail || '—',
+          changedOn: ev.timestamp,
+        })
+      }
+    } else if (r.status === 'rescheduled' || r.status === 'cancelled') {
+      rows.push({
+        id: r.id,
+        typeName: (r.typeName && r.typeName.trim()) ? r.typeName.trim() : 'Unspecified',
+        change: r.status === 'cancelled' ? 'Cancelled' : 'Rescheduled',
+        initiatedBy: 'Staff',
+        originalTime: r.date && r.time ? `${r.date} ${r.time}` : 'Not scheduled',
+        newTime: r.status === 'cancelled' ? '—' : (r.proposedDate && r.proposedTime ? `${r.proposedDate} ${r.proposedTime}` : '—'),
+        reason: '—',
+        changedOn: r.updatedAt || r.submittedAt,
+      })
+    }
+  }
+
+  rows.sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'change') cmp = a.change.localeCompare(b.change)
+    else if (sortBy === 'typeName') cmp = a.typeName.localeCompare(b.typeName)
+    else cmp = a.changedOn.localeCompare(b.changedOn)
+    if (cmp === 0) cmp = a.id.localeCompare(b.id)
+    return sortOrder === 'desc' ? -cmp : cmp
+  })
+
+  const start = (page - 1) * pageSize
+  return {
+    rows: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  }
+}
+
+export async function fetchReportTable<T>(
+  actor: Actor,
+  type: 'register' | 'pending' | 'turnaround' | 'changes',
+  filters: ReportFilters,
+  pagination: { page?: number; pageSize?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {},
+): Promise<TableReportResult<T>> {
+  if (DATA_SOURCE === 'supabase' && getToken()) {
+    const q = new URLSearchParams({ from: filters.from, to: filters.to })
+    if (filters.dateBasis)   q.set('dateBasis', filters.dateBasis)
+    if (filters.department)  q.set('department', filters.department)
+    if (filters.authorityId) q.set('authorityId', filters.authorityId)
+    if (filters.typeId)      q.set('typeId', filters.typeId)
+    if (filters.status) {
+      const s = Array.isArray(filters.status) ? filters.status.join(',') : filters.status
+      if (s) q.set('status', s)
+    }
+    if (filters.search)      q.set('search', filters.search)
+    if (pagination.page)     q.set('page', String(pagination.page))
+    if (pagination.pageSize) q.set('pageSize', String(pagination.pageSize))
+    if (pagination.sortBy)   q.set('sortBy', pagination.sortBy)
+    if (pagination.sortOrder) q.set('sortOrder', pagination.sortOrder)
+
+    const res = await api.get<{ report: TableReportResult<T> }>(`/api/reports/${type}?${q.toString()}`)
+    return res.report
+  }
+
+  await delay(250)
+  const canAll = hasPermission(actor.role, 'reports.viewAll')
+  const canOwn = hasPermission(actor.role, 'reports.view')
+  if (!(canAll || canOwn)) {
+    throw new ServiceError('forbidden', 'You do not have permission to view reports.')
+  }
+  const scope = canAll ? STORE : STORE.filter(rec => visibleTo(actor, rec))
+
+  if (type === 'register') {
+    return mockRegisterReport(
+      scope,
+      filters,
+      pagination.page,
+      pagination.pageSize,
+      pagination.sortBy,
+      pagination.sortOrder,
+    ) as unknown as TableReportResult<T>
+  }
+
+  if (type === 'pending') {
+    return mockPendingReport(
+      scope,
+      filters,
+      pagination.page,
+      pagination.pageSize,
+      pagination.sortBy,
+      pagination.sortOrder,
+    ) as unknown as TableReportResult<T>
+  }
+
+  if (type === 'turnaround') {
+    return mockTurnaroundReport(
+      scope,
+      getAllEvents(),
+      filters,
+      pagination.page,
+      pagination.pageSize,
+      pagination.sortBy,
+      pagination.sortOrder,
+    ) as unknown as TableReportResult<T>
+  }
+
+  if (type === 'changes') {
+    return mockChangesReport(
+      scope,
+      getAllEvents(),
+      filters,
+      pagination.page,
+      pagination.pageSize,
+      pagination.sortBy,
+      pagination.sortOrder,
+    ) as unknown as TableReportResult<T>
+  }
+
+  return { rows: [], total: 0, page: 1, pageSize: 10 } as unknown as TableReportResult<T>
+}
+
+export async function downloadReportCsv(
+  actor: Actor,
+  type: string,
+  filters: ReportFilters,
+): Promise<void> {
+  const q = new URLSearchParams({ from: filters.from, to: filters.to })
+  if (filters.dateBasis)   q.set('dateBasis', filters.dateBasis)
+  if (filters.department)  q.set('department', filters.department)
+  if (filters.authorityId) q.set('authorityId', filters.authorityId)
+  if (filters.typeId)      q.set('typeId', filters.typeId)
+  if (filters.status) {
+    const s = Array.isArray(filters.status) ? filters.status.join(',') : filters.status
+    if (s) q.set('status', s)
+  }
+  if (filters.search)      q.set('search', filters.search)
+
+  if (DATA_SOURCE === 'supabase') {
+    const token = getToken()
+    const url = `${baseUrl()}/api/reports/${type}/export.csv?${q.toString()}`
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      throw new ServiceError('validation', err?.error?.message || 'Export failed')
+    }
+    const cd = res.headers.get('Content-Disposition')
+    let filename = `${type}_${filters.from}_to_${filters.to}.csv`
+    if (cd) {
+      const match = cd.match(/filename="?([^"]+)"?/)
+      if (match && match[1]) filename = match[1]
+    }
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
+    return
+  }
+
+  // Offline mock fallback
+  const filename = `${type}_${filters.from}_to_${filters.to}.csv`
+  const blob = new Blob(['\uFEFFAppointment ID,Status\r\nAPT-1,Submitted'], { type: 'text/csv;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(blobUrl)
 }
 
 // ─── Master data (super admin) ────────────────────────────────────────────────

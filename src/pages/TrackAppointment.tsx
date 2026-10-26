@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, ArrowLeft, CheckCircle2, Calendar, Clock, Building2, User } from 'lucide-react'
+import { Search, ArrowLeft, CheckCircle2, Calendar, Clock, Building2, User, Video, MapPin } from 'lucide-react'
 import StatusBadge from '../components/common/StatusBadge'
 import Logo from '../components/ui/Logo'
 import { SEED_APPOINTMENTS, getStatusTimeline, dtoToRecord, type AppointmentRecord } from '../data/mockAppointments'
 import { api } from '../services/apiClient'
+import GoogleMeetCard from '../components/common/GoogleMeetCard'
+import { getAppointmentMeetLink } from '../utils/googleMeet'
 
 // Under the real backend, tracking uses the public GET /track/:id endpoint
 // (no sign-in required). Under mock it searches the seed by id.
@@ -199,6 +201,10 @@ export default function TrackAppointment() {
                   { icon: <User      size={13} />, label: 'Authority',  value: result.authority     },
                   { icon: <Calendar  size={13} />, label: 'Date',       value: formatDate(result.date) },
                   { icon: <Clock     size={13} />, label: 'Time',       value: result.time          },
+                  { icon: <Video     size={13} />, label: 'Method',     value: result.mode === 'online' ? 'Online' : 'Offline / In-Person' },
+                  ...(result.mode !== 'online' && result.locationLabel
+                    ? [{ icon: <MapPin size={13} />, label: 'Location', value: result.locationLabel }]
+                    : []),
                 ].map(row => (
                   <div key={row.label} className="flex items-center gap-2.5">
                     <span style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>{row.icon}</span>
@@ -211,6 +217,23 @@ export default function TrackAppointment() {
                   </div>
                 ))}
               </div>
+
+              {result.mode === 'online' && (
+                <GoogleMeetCard
+                  appointmentId={result.id}
+                  meetUrl={getAppointmentMeetLink(result) || ''}
+                  date={result.date ? formatDate(result.date) : undefined}
+                  time={result.time || undefined}
+                  rawDate={result.date}
+                  rawTime={result.time}
+                  subject={result.purpose}
+                  authorityName={result.authority}
+                  department={result.department}
+                  requesterName={result.requester}
+                  status={result.status}
+                  showCalendarButton={['approved', 'confirmed'].includes(result.status)}
+                />
+              )}
             </div>
 
             {/* Timeline */}

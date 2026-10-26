@@ -67,8 +67,9 @@ export function createApp() {
   // Availability: GET/PUT /availability/:authorityId
   app.use('/availability', availabilityRouter)
 
-  // Reports: GET /reports
+  // Reports: GET /reports and GET /api/reports
   app.use('/reports', reportsRouter)
+  app.use('/api/reports', reportsRouter)
 
   // Master data (super admin): GET /master + CRUD for departments/types/authorities
   app.use('/master', masterRouter)

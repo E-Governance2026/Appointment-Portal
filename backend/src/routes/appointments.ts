@@ -9,6 +9,7 @@ import { APPOINTMENT_COLUMNS, toAppointmentDto, type AppointmentRow } from './ap
 import { AUDIT_COLUMNS, appendEvent, toTimelineDto, type AuditRow } from './auditLog.js'
 import { sweepNoShows } from '../domain/noShowSweep.js'
 import { AUTHORITIES, BOOK_WITH_OPTIONS } from '../seed/seedData.js'
+import { generateGoogleMeetLink } from '../domain/googleMeet.js'
 import type { Actor, Role } from '../types.js'
 
 // ─── Appointments routes ──────────────────────────────────────────────────────
@@ -183,7 +184,7 @@ appointmentsRouter.get('/:id', requireAuth(), async (req: Request, res: Response
 
 // ── Submit (3-step booking) ──
 // Step 1: appointment-with = one of BOOK_WITH_OPTIONS (Department / Shivendra
-//         sir / Jaimi sir) -> resolves to an authority.
+//         sir / Jaimeel sir) -> resolves to an authority.
 // Step 2: date + time, both OPTIONAL (the authority proposes a time at
 //         approval when left blank).
 // Step 3: subject + reason (description).
@@ -195,6 +196,7 @@ export const submitSchema = z.object({
   time:        z.string().trim().optional().default(''),
   subject:     z.string().trim().min(1, 'Enter a subject.'),
   description: z.string().trim().min(1, 'Describe the reason for the appointment.'),
+  mode:        z.enum(['physical', 'online', 'phone']).optional().default('physical'),
 })
 
 // Resolve the step-1 choice to an authority record. Accepts either a
@@ -222,7 +224,7 @@ appointmentsRouter.post('/', requireAuth(), async (req: Request, res: Response, 
     if (!parsed.success) {
       throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'Invalid booking details.')
     }
-    const { bookWith, date, time, subject, description } = parsed.data
+    const { bookWith, date, time, subject, description, mode } = parsed.data
 
     const authority = resolveAuthority(bookWith)
     if (!authority) {
@@ -241,6 +243,16 @@ appointmentsRouter.post('/', requireAuth(), async (req: Request, res: Response, 
     const initials = actor.name
       .split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('')
 
+    let resolvedTypeName = 'Unspecified'
+    if (derivedTypeId) {
+      const { data: typeRow } = await supabase
+        .from('appointment_types')
+        .select('name')
+        .eq('id', derivedTypeId)
+        .maybeSingle()
+      if (typeRow?.name) resolvedTypeName = typeRow.name
+    }
+
     const insertRow = {
       id:                 nextAppointmentId(),
       requester:          actor.name,
@@ -248,7 +260,7 @@ appointmentsRouter.post('/', requireAuth(), async (req: Request, res: Response, 
       requester_initials: initials,
       requester_category: 'Staff',
       type_id:            derivedTypeId,
-      type_name:          '',
+      type_name:          resolvedTypeName,
       purpose_label:      '',
       department:         authority.department,
       authority_id:       authority.id,
@@ -257,7 +269,7 @@ appointmentsRouter.post('/', requireAuth(), async (req: Request, res: Response, 
       time:               time.length > 0 ? time : null,
       subject,
       description,
-      mode:               'physical' as const,
+      mode:               (mode === 'online' ? 'online' : 'physical') as 'physical' | 'online' | 'phone',
       location_label:     '',
       documents_count:    0,
       status:             'submitted' as const,
@@ -320,6 +332,8 @@ const slotSchema = z.object({
 export const approveSchema = z.object({
   note: z.string().trim().optional(),
   slot: slotSchema.optional(),
+  meetingUrl: z.string().trim().optional(),
+  confirm: z.boolean().optional(),
 })
 appointmentsRouter.post('/:id/approve', requireAuth(), async (req, res, next) => {
   try {
@@ -330,14 +344,19 @@ appointmentsRouter.post('/:id/approve', requireAuth(), async (req, res, next) =>
     if (!parsed.success) {
       throw new HttpError('validation', parsed.error.issues[0]?.message ?? 'Invalid approval details.')
     }
-    const { note, slot } = parsed.data
+    const { note, slot, meetingUrl, confirm: shouldConfirm } = parsed.data
 
     const row = await loadRow(req.params.id)
     assertCanView(actor, row)
-    if (row.status === 'approved') {
+    if (row.status === 'confirmed') {
+      throw new HttpError('duplicate', 'This request has already been confirmed.')
+    }
+    if (row.status === 'approved' && !shouldConfirm) {
       throw new HttpError('duplicate', 'This request has already been approved.')
     }
-    assertTransitionOrThrow(row.status, 'approved')
+    if (row.status !== 'approved') {
+      assertTransitionOrThrow(row.status, 'approved')
+    }
 
     const alreadyHasSlot = !!row.date && !!row.time
     let date = row.date
@@ -353,21 +372,94 @@ appointmentsRouter.post('/:id/approve', requireAuth(), async (req, res, next) =>
 
     const supabase = getSupabase()
     const now = new Date().toISOString()
+    const meetUrl = (meetingUrl && meetingUrl.trim()) || (row.location_label && row.location_label.startsWith('http') ? row.location_label : (row.mode === 'online' ? generateGoogleMeetLink(row.id) : ''))
+
+    const isConfirming = shouldConfirm === true
+    const targetStatus = isConfirming ? 'confirmed' : 'approved'
+    const targetStage = isConfirming ? 'Confirmed' : 'Confirmation pending'
+
+    const updateObj: Record<string, unknown> = {
+      status: targetStatus,
+      date,
+      time,
+      assigned_stage: targetStage,
+      updated_at: now,
+    }
+    if (meetUrl) {
+      updateObj.location_label = meetUrl
+    }
+
     const { data, error } = await supabase
       .from('appointments')
-      .update({ status: 'approved', date, time, assigned_stage: 'Confirmation pending', updated_at: now })
+      .update(updateObj)
       .eq('id', row.id)
       .select(APPOINTMENT_COLUMNS)
       .single()
     if (error) throw new HttpError('internal_error', error.message)
 
-    const slotDetail = `Scheduled for ${date} at ${time}.`
+    const meetNote = meetUrl ? ` Google Meet link: ${meetUrl}.` : ''
+    const slotDetail = `Scheduled for ${date} at ${time}.${meetNote}`
+
+    if (row.status !== 'approved') {
+      await appendEvent(supabase, {
+        appointmentId: row.id, action: 'approved',
+        actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+        summary: `Approved by ${actor.name}.`,
+        detail: note ? `${slotDetail} ${note}` : slotDetail,
+        fromStatus: row.status, toStatus: 'approved',
+      })
+    }
+
+    if (isConfirming) {
+      await appendEvent(supabase, {
+        appointmentId: row.id, action: 'confirmed',
+        actorId: actor.id, actorName: actor.name, actorRole: actor.role,
+        summary: `Confirmed by ${actor.name}.`,
+        fromStatus: 'approved', toStatus: 'confirmed',
+      })
+      await appendEvent(supabase, {
+        appointmentId: row.id, action: 'notification-sent',
+        actorId: 'system', actorName: 'System', actorRole: 'system',
+        summary: 'Confirmation sent to the requester by website and email.',
+        detail: `Appointment confirmed for ${date} at ${time}.${meetNote}`,
+      })
+    }
+
+    res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /appointments/:id/meeting-url — update the meeting link directly
+appointmentsRouter.post('/:id/meeting-url', requireAuth(), async (req, res, next) => {
+  try {
+    const actor = req.actor!
+    const row = await loadRow(req.params.id)
+    assertCanView(actor, row)
+
+    const schema = z.object({ meetingUrl: z.string().trim() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      throw new HttpError('validation', 'Invalid meeting URL.')
+    }
+    const { meetingUrl } = parsed.data
+
+    const supabase = getSupabase()
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ location_label: meetingUrl, updated_at: now })
+      .eq('id', row.id)
+      .select(APPOINTMENT_COLUMNS)
+      .single()
+    if (error) throw new HttpError('internal_error', error.message)
+
     await appendEvent(supabase, {
-      appointmentId: row.id, action: 'approved',
+      appointmentId: row.id, action: 'internal-remark',
       actorId: actor.id, actorName: actor.name, actorRole: actor.role,
-      summary: `Approved by ${actor.name}.`,
-      detail: note ? `${slotDetail} ${note}` : slotDetail,
-      fromStatus: row.status, toStatus: 'approved',
+      summary: `Google Meet link updated by ${actor.name}.`,
+      detail: meetingUrl,
     })
 
     res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })
@@ -468,9 +560,22 @@ appointmentsRouter.post('/:id/confirm', requireAuth(), async (req, res, next) =>
 
     const supabase = getSupabase()
     const now = new Date().toISOString()
+    const meetUrl = (row.location_label && row.location_label.startsWith('http'))
+      ? row.location_label
+      : (row.mode === 'online' ? generateGoogleMeetLink(row.id) : '')
+
+    const updateObj: Record<string, unknown> = {
+      status: 'confirmed',
+      assigned_stage: 'Confirmed',
+      updated_at: now,
+    }
+    if (meetUrl && !row.location_label) {
+      updateObj.location_label = meetUrl
+    }
+
     const { data, error } = await supabase
       .from('appointments')
-      .update({ status: 'confirmed', assigned_stage: 'Confirmed', updated_at: now })
+      .update(updateObj)
       .eq('id', row.id)
       .select(APPOINTMENT_COLUMNS)
       .single()
@@ -483,11 +588,12 @@ appointmentsRouter.post('/:id/confirm', requireAuth(), async (req, res, next) =>
       fromStatus: row.status, toStatus: 'confirmed',
     })
     // Confirmation notification (website + email), recorded as a system event.
+    const meetNote = meetUrl ? ` Google Meet link: ${meetUrl}.` : ''
     await appendEvent(supabase, {
       appointmentId: row.id, action: 'notification-sent',
       actorId: 'system', actorName: 'System', actorRole: 'system',
       summary: 'Confirmation sent to the requester by website and email.',
-      detail: `Appointment confirmed for ${row.date} at ${row.time}.`,
+      detail: `Appointment confirmed for ${row.date} at ${row.time}.${meetNote}`,
     })
 
     res.json({ appointment: toAppointmentDto(data as unknown as AppointmentRow) })

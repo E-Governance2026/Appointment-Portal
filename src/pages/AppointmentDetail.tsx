@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Calendar, Clock, Building2, User,
-  FileText, CheckCircle2, XCircle,
+  FileText, CheckCircle2, XCircle, Video, MapPin, CalendarPlus,
 } from 'lucide-react'
 import StatusBadge from '../components/common/StatusBadge'
 import { SEED_APPOINTMENTS, getStatusTimeline, dtoToRecord, type AppointmentRecord } from '../data/mockAppointments'
 import { fetchApproval } from '../services/appointmentsService'
+import GoogleMeetCard from '../components/common/GoogleMeetCard'
+import { getAppointmentMeetLink } from '../utils/googleMeet'
+import { googleCalendarUrl } from '../utils/calendar'
 
 // Under the real backend a single appointment is read from GET /appointments/:id.
 const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
@@ -203,9 +206,62 @@ export default function AppointmentDetail() {
             <InfoRow icon={<FileText  size={13} />} label="Type"       value={appt.appointmentType} />
             <InfoRow icon={<Calendar  size={13} />} label="Date"       value={formatDate(appt.date)} />
             <InfoRow icon={<Clock     size={13} />} label="Time"       value={appt.time} />
+            <InfoRow icon={<Video     size={13} />} label="Method"     value={appt.mode ? (appt.mode === 'online' ? 'Online' : 'Offline / In-Person') : 'Offline / In-Person'} />
+            {appt.mode !== 'online' && appt.locationLabel && (
+              <InfoRow icon={<MapPin   size={13} />} label="Location"   value={appt.locationLabel} />
+            )}
             <InfoRow icon={<Building2 size={13} />} label="Department" value={appt.department} />
             <InfoRow icon={<User      size={13} />} label="Requested by" value={appt.requester} />
             <InfoRow icon={<FileText  size={13} />} label="Purpose"    value={appt.purpose} />
+
+            {appt.mode === 'online' && (
+              <GoogleMeetCard
+                appointmentId={appt.id}
+                meetUrl={getAppointmentMeetLink(appt) || ''}
+                date={appt.date ? formatDate(appt.date) : undefined}
+                time={appt.time || undefined}
+                rawDate={appt.date}
+                rawTime={appt.time}
+                subject={appt.purpose}
+                authorityName={appt.authority}
+                department={appt.department}
+                requesterName={appt.requester}
+                status={appt.status}
+                showCalendarButton={['approved', 'confirmed'].includes(appt.status)}
+              />
+            )}
+
+            {appt.mode !== 'online' && ['approved', 'confirmed'].includes(appt.status) && appt.date && appt.time && (() => {
+              const url = googleCalendarUrl({
+                title: `Appointment: ${appt.purpose}`,
+                date: appt.date,
+                time: appt.time,
+                details: `With ${appt.authority}. Department: ${appt.department}.`,
+                location: appt.locationLabel || undefined,
+              })
+              if (!url) return null
+              return (
+                <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-sage)' }}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      textDecoration: 'none',
+                      fontSize: '13px',
+                      padding: '0.5rem 0.875rem',
+                    }}
+                  >
+                    <CalendarPlus size={14} aria-hidden="true" />
+                    Add to Google Calendar
+                  </a>
+                </div>
+              )
+            })()}
           </div>
 
           {/* Actions */}

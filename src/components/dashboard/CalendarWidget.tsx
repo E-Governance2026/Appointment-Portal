@@ -7,18 +7,52 @@ import { SEED_HOLIDAY_SET } from '../../data/mockAppointments'
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'] as const
 
-type MarkType = 'confirmed' | 'pending' | 'holiday'
-const DOT: Record<MarkType, string> = {
-  confirmed: 'var(--color-emerald)',
-  pending:   'var(--color-amber)',
-  holiday:   'var(--color-danger)',
+type MarkType = 'confirmed' | 'pending' | 'completed' | 'holiday'
+
+interface MarkConfig {
+  bg: string
+  text: string
+  label: string
+}
+
+const MARK_CONFIG: Record<MarkType, MarkConfig> = {
+  confirmed: {
+    bg: 'var(--color-emerald)',
+    text: '#ffffff',
+    label: 'Confirmed',
+  },
+  pending: {
+    bg: 'var(--color-amber)',
+    text: 'var(--color-charcoal)',
+    label: 'Awaiting approval',
+  },
+  completed: {
+    bg: 'var(--color-info)',
+    text: '#ffffff',
+    label: 'Completed',
+  },
+  holiday: {
+    bg: 'var(--color-danger)',
+    text: '#ffffff',
+    label: 'Holiday',
+  },
 }
 
 function markFor(status: AppointmentStatus): MarkType | null {
-  if (status === 'confirmed' || status === 'approved' || status === 'completed') return 'confirmed'
+  if (status === 'completed') return 'completed'
+  if (status === 'confirmed' || status === 'approved') return 'confirmed'
   if (status === 'submitted' || status === 'additional-info') return 'pending'
   return null
 }
+
+function getPrimaryMark(types: Set<MarkType>): MarkType | null {
+  if (types.has('holiday')) return 'holiday'
+  if (types.has('confirmed')) return 'confirmed'
+  if (types.has('pending')) return 'pending'
+  if (types.has('completed')) return 'completed'
+  return null
+}
+
 function pad2(n: number) { return String(n).padStart(2, '0') }
 
 interface CalendarWidgetProps {
@@ -151,10 +185,47 @@ export default function CalendarWidget({ selectedDate, onSelectDate }: CalendarW
           const isToday = cell.cur && cell.iso === todayISO
           const isSelected = cell.cur && cell.iso === selectedDate
           const entry = cell.iso ? marksByDay.get(cell.iso) : undefined
-          const dots = entry ? Array.from(entry.types).slice(0, 3) : []
+          const primaryMark = entry ? getPrimaryMark(entry.types) : null
+          const markStyle = primaryMark ? MARK_CONFIG[primaryMark] : null
+
+          let circleBg = 'transparent'
+          let circleColor = cell.cur ? 'var(--color-charcoal)' : 'var(--color-text-secondary)'
+          let circleWeight: number | string = 400
+          let circleShadow = 'none'
+
+          if (!cell.cur) {
+            circleColor = 'var(--color-sage-strong)'
+          } else if (markStyle) {
+            circleBg = markStyle.bg
+            circleColor = markStyle.text
+            circleWeight = 600
+
+            if (isSelected) {
+              circleShadow = '0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-forest)'
+            } else if (isToday) {
+              circleShadow = '0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-forest)'
+            }
+          } else if (isToday) {
+            circleBg = 'var(--color-forest)'
+            circleColor = '#ffffff'
+            circleWeight = 700
+
+            if (isSelected) {
+              circleShadow = '0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-forest)'
+            }
+          } else if (isSelected) {
+            circleBg = 'var(--color-sage)'
+            circleColor = 'var(--color-charcoal)'
+            circleWeight = 700
+            circleShadow = '0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-forest)'
+          }
+
           const dateObj = cell.iso ? new Date(cell.iso + 'T00:00:00') : null
+          const statusLabels = entry
+            ? Array.from(entry.types).map(t => MARK_CONFIG[t].label).join(', ')
+            : ''
           const ariaLabel = dateObj
-            ? `${dateObj.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${entry?.count ? `, ${entry.count} appointment${entry.count > 1 ? 's' : ''}` : ''}`
+            ? `${dateObj.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${isToday ? ', today' : ''}${statusLabels ? `, ${statusLabels}` : ''}${entry?.count ? `, ${entry.count} appointment${entry.count > 1 ? 's' : ''}` : ''}`
             : undefined
 
           return (
@@ -167,24 +238,49 @@ export default function CalendarWidget({ selectedDate, onSelectDate }: CalendarW
               aria-label={ariaLabel}
               aria-selected={isSelected}
               aria-current={isToday ? 'date' : undefined}
-              style={{ height: '44px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: '3px', border: 'none', padding: 0, cursor: cell.cur ? 'pointer' : 'default', backgroundColor: 'transparent',
-                borderRadius: 'var(--radius-md)' }}
+              style={{
+                height: '42px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                padding: 0,
+                cursor: cell.cur ? 'pointer' : 'default',
+                backgroundColor: 'transparent',
+                borderRadius: 'var(--radius-md)',
+              }}
               onFocus={focusRing}
-              onMouseEnter={e => { if (cell.cur && !isToday && !isSelected) e.currentTarget.style.backgroundColor = 'var(--color-sage)' }}
-              onMouseLeave={e => { if (!isToday && !isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
+              onMouseEnter={e => {
+                if (cell.cur && !isToday && !isSelected && !markStyle) {
+                  e.currentTarget.style.backgroundColor = 'var(--color-sage)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isToday && !isSelected && !markStyle) {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                }
+              }}
             >
-              <span className="tnum" style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: isToday ? '50%' : 'var(--radius-sm)',
-                backgroundColor: isToday ? 'var(--color-forest)' : isSelected ? 'var(--color-sage)' : 'transparent',
-                fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: isToday || isSelected ? 700 : 400,
-                color: isToday ? '#ffffff' : cell.cur ? 'var(--color-charcoal)' : 'var(--color-text-secondary)', lineHeight: 1 }}>
+              <span
+                className="tnum"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  backgroundColor: circleBg,
+                  color: circleColor,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: circleWeight,
+                  boxShadow: circleShadow,
+                  lineHeight: 1,
+                  transition: 'background-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out)',
+                }}
+              >
                 {cell.day}
-              </span>
-              <span style={{ display: 'flex', gap: '3px', height: '4px', alignItems: 'center' }}>
-                {dots.map((t, di) => (
-                  <span key={di} aria-hidden="true" style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: DOT[t], display: 'block' }} />
-                ))}
               </span>
             </button>
           )
@@ -195,12 +291,13 @@ export default function CalendarWidget({ selectedDate, onSelectDate }: CalendarW
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', marginTop: 'var(--space-3)',
         paddingTop: 'var(--space-3)', borderTop: '1px solid var(--color-sage)' }}>
         {[
-          { label: 'Confirmed', color: DOT.confirmed },
-          { label: 'Awaiting approval', color: DOT.pending },
-          { label: 'Holiday', color: DOT.holiday },
+          { label: 'Confirmed',         color: MARK_CONFIG.confirmed.bg },
+          { label: 'Awaiting approval', color: MARK_CONFIG.pending.bg },
+          { label: 'Completed',         color: MARK_CONFIG.completed.bg },
+          { label: 'Holiday',           color: MARK_CONFIG.holiday.bg },
         ].map(item => (
-          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span aria-hidden="true" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block' }} />
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span aria-hidden="true" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: item.color, display: 'inline-block', flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>{item.label}</span>
           </div>
         ))}

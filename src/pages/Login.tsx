@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, ChevronDown } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
@@ -28,13 +28,23 @@ function validatePassword(value: string): string {
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
+  const user     = useAuthStore(s => s.user)
   const loginAs  = useAuthStore(s => s.loginAs)
   const login    = useAuthStore(s => s.login)
-  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? '/dashboard'
+  const rawReturnTo = (location.state as { returnTo?: string } | null)?.returnTo
+  const returnTo = (!rawReturnTo || rawReturnTo === '/' || rawReturnTo === '/login')
+    ? '/dashboard'
+    : rawReturnTo
 
-  // When VITE_DATA_SOURCE=supabase the form authenticates against the backend;
-  // otherwise it uses the demo login so local/offline development still works.
-  const useBackend = import.meta.env.VITE_DATA_SOURCE === 'supabase'
+  useEffect(() => {
+    if (user) {
+      navigate(returnTo, { replace: true })
+    }
+  }, [user, returnTo, navigate])
+
+  // Use the real backend whenever VITE_API_BASE_URL is configured, regardless
+  // of VITE_DATA_SOURCE — this prevents the env flag from being missed at runtime.
+  const useBackend = !!(import.meta.env.VITE_API_BASE_URL)
 
   const [identifier, setIdentifier] = useState('')
   const [password,   setPassword]   = useState('')
@@ -63,17 +73,17 @@ export default function Login() {
     setLoading(true)
     try {
       if (useBackend) {
-        // Identifier is the email for real logins.
         await login(identifier.trim(), password)
       } else {
-        // Demo/offline path: keep the short delay + the 'wrong' test shortcut.
         await new Promise(r => setTimeout(r, 900))
         if (identifier === 'wrong' || password === 'wrong') {
           throw new Error('Employee ID or password is incorrect. Check both and try again.')
         }
         loginAs('requester')
       }
-      navigate(returnTo, { replace: true })
+      // Use hard navigation to guarantee the route tree re-evaluates with the
+      // new auth state — prevents stale React Router state from redirecting back.
+      window.location.href = returnTo
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign in failed. Try again.'
       setBannerErr(message)
@@ -125,12 +135,12 @@ export default function Login() {
             </p>
           </div>
 
-          <div style={{ aspectRatio: '4 / 3', maxWidth: '560px', borderRadius: '12px',
-            border: '1px dashed rgb(255 255 255 / 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', color: 'rgb(255 255 255 / 0.55)',
-              textAlign: 'center', padding: '1rem', margin: 0 }}>
-              Replace with official campus photograph
-            </p>
+          <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
+            <img
+              src="/images/campus-gate.jpeg"
+              alt="Parul University campus gate"
+              style={{ width: '100%', height: 'auto', display: 'block' }}
+            />
           </div>
         </div>
 

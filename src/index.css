@@ -422,3 +422,110 @@ ul, ol {
   color: var(--color-text-muted);
   margin-top: var(--space-1);
 }
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Responsive containers */
+@media (max-width: 640px) {
+  button, select, input {
+    min-height: 44px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PRINT STYLESHEET
+   Clean monochrome layout for print / PDF output
+   ═══════════════════════════════════════════════════════════════ */
+@media print {
+  /* Hide application chrome */
+  aside,
+  nav,
+  header,
+  [role="tablist"],
+  .no-print,
+  .btn-primary,
+  .btn-secondary,
+  .reports-filter-bar,
+  button,
+  input,
+  select {
+    display: none !important;
+  }
+
+  /* Show dedicated print header */
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-size: 11pt !important;
+    margin: 0 !important;
+    padding: 0.5in !important;
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .card {
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin-bottom: 1rem !important;
+  }
+
+  /* Table print rules: headers repeat, rows never split */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  th {
+    background-color: #f3f4f6 !important;
+    color: #111111 !important;
+    border: 1px solid #d1d5db !important;
+    font-weight: 700 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  td {
+    border: 1px solid #e5e7eb !important;
+    color: #111111 !important;
+  }
+
+  /* Charts in black and white */
+  svg rect {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    stroke: #000000 !important;
+    stroke-width: 1px !important;
+  }
+}
+
