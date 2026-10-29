@@ -14,16 +14,26 @@ export function requirePermission(actor: Actor, action: Action): void {
   }
 }
 
-/** Throw 403 unless the actor may see this appointment (row-level visibility). */
+/** Throw 404 unless the actor may see this appointment (prevent IDOR existence discovery). */
 export function requireCanView(actor: ViewerLike, appt: ViewableAppointment): void {
   if (!canViewAppointment(actor, appt)) {
-    throw new HttpError('forbidden', 'You do not have access to this appointment.')
+    throw new HttpError('not_found', 'Appointment not found.')
   }
 }
 
+/** Check if actor can act on this approval stage. */
+export function canActOnApproval(actor: Actor, appt: ViewableAppointment): boolean {
+  if (actor.role === 'super_admin') return true
+  if (actor.role === 'admin_dispatcher') return true
+  if (actor.role === 'coordinator_authority') {
+    return appt.assignedRole === undefined || appt.assignedRole === actor.role
+  }
+  return false
+}
+
 /** Throw 409 if the status transition is not legal. */
-export function assertTransitionOrThrow(from: AppointmentStatus, to: AppointmentStatus): void {
-  if (!canTransition(from, to)) {
+export function assertTransitionOrThrow(from: AppointmentStatus, to: AppointmentStatus, role?: string): void {
+  if (!canTransition(from, to, role)) {
     throw new HttpError('illegal_transition', `This action is not allowed from status "${from}".`)
   }
 }

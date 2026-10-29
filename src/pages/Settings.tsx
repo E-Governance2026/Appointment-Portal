@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { UserCircle, SlidersHorizontal } from 'lucide-react'
+import { UserCircle, SlidersHorizontal, ShieldCheck } from 'lucide-react'
 import ProfileCard from '../components/settings/ProfileCard'
 import PreferencesForm from '../components/settings/PreferencesForm'
+import SecuritySettings from '../components/settings/SecuritySettings'
 
-type TabKey = 'profile' | 'preferences'
+type TabKey = 'profile' | 'preferences' | 'security'
 
 export default function Settings() {
   const [tab, setTab] = useState<TabKey>('profile')
@@ -11,12 +12,13 @@ export default function Settings() {
   const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: 'profile',     label: 'Profile',     icon: <UserCircle size={15} aria-hidden="true" /> },
     { key: 'preferences', label: 'Preferences', icon: <SlidersHorizontal size={15} aria-hidden="true" /> },
+    { key: 'security',    label: 'Security',    icon: <ShieldCheck size={15} aria-hidden="true" /> },
   ]
 
   return (
     <div>
       <h1 className="page-title">Settings</h1>
-      <p className="page-subtitle">Your profile and app preferences.</p>
+      <p className="page-subtitle">Your profile, security credentials, and app preferences.</p>
 
       <div role="tablist" aria-label="Settings" style={{ display: 'flex', gap: '8px',
         margin: '1.25rem 0', borderBottom: '1px solid var(--color-sage)', flexWrap: 'wrap' }}>
@@ -38,7 +40,9 @@ export default function Settings() {
         })}
       </div>
 
-      {tab === 'profile' ? <ProfileCard /> : <PreferencesForm />}
+      {tab === 'profile' && <ProfileCard />}
+      {tab === 'preferences' && <PreferencesForm />}
+      {tab === 'security' && <SecuritySettings />}
     </div>
   )
 }

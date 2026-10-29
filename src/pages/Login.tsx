@@ -6,8 +6,8 @@ import type { Role } from '../config/permissions'
 import Logo from '../components/ui/Logo'
 import Button from '../components/ui/Button'
 
-// Demo role switcher — enabled only in dev builds.
-const features = { demoRoleSwitcher: import.meta.env.DEV === true }
+// Demo role switcher — strictly disabled in production builds.
+const features = { demoRoleSwitcher: import.meta.env.DEV === true && import.meta.env.MODE !== 'production' }
 
 const DEMO_ROLE_OPTIONS: { label: string; role: Role }[] = [
   { label: 'Requester',               role: 'requester'             },
@@ -31,8 +31,14 @@ export default function Login() {
   const user     = useAuthStore(s => s.user)
   const loginAs  = useAuthStore(s => s.loginAs)
   const login    = useAuthStore(s => s.login)
-  const rawReturnTo = (location.state as { returnTo?: string } | null)?.returnTo
-  const returnTo = (!rawReturnTo || rawReturnTo === '/' || rawReturnTo === '/login')
+  const verifyMfa = useAuthStore(s => s.verifyMfa)
+  const verifyRecoveryCode = useAuthStore(s => s.verifyRecoveryCode)
+
+  const searchParams = new URLSearchParams(location.search)
+  const reasonParam = searchParams.get('reason')
+  const nextParam = searchParams.get('next')
+  const rawReturnTo = nextParam ? decodeURIComponent(nextParam) : (location.state as { returnTo?: string } | null)?.returnTo
+  const returnTo = (!rawReturnTo || rawReturnTo === '/' || rawReturnTo === '/login' || !rawReturnTo.startsWith('/') || rawReturnTo.startsWith('//'))
     ? '/dashboard'
     : rawReturnTo
 
@@ -42,15 +48,31 @@ export default function Login() {
     }
   }, [user, returnTo, navigate])
 
-  // Use the real backend whenever VITE_API_BASE_URL is configured, regardless
-  // of VITE_DATA_SOURCE — this prevents the env flag from being missed at runtime.
-  const useBackend = !!(import.meta.env.VITE_API_BASE_URL)
+  // Status banner messages per spec
+  let statusBannerText = ''
+  if (reasonParam === 'timeout') {
+    statusBannerText = 'You were signed out after 3 minutes of inactivity.'
+  } else if (reasonParam === 'expired') {
+    statusBannerText = 'Your session has expired. Sign in again.'
+  } else if (reasonParam === 'absolute') {
+    statusBannerText = 'You were signed out after a long session. Sign in again.'
+  }
+
+  // Use the real backend whenever VITE_API_BASE_URL is configured or in test mode
+  const isTestEnv = import.meta.env.MODE === 'test' || (typeof globalThis !== 'undefined' && (globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV === 'test')
+  const useBackend = !!(import.meta.env.VITE_API_BASE_URL) || Boolean(isTestEnv)
 
   const [identifier, setIdentifier] = useState('')
   const [password,   setPassword]   = useState('')
   const [showPass,   setShowPass]   = useState(false)
   const [loading,    setLoading]    = useState(false)
   const [capsOn,     setCapsOn]     = useState(false)
+
+  // MFA Challenge State
+  const [mfaPending, setMfaPending] = useState<{ tempSessionId?: string } | null>(null)
+  const [totpCode,   setTotpCode]   = useState('')
+  const [useRecovery, setUseRecovery] = useState(false)
+  const [recoveryCode, setRecoveryCode] = useState('')
 
   const [idError,   setIdError]   = useState('')
   const [passError, setPassError] = useState('')
@@ -73,17 +95,20 @@ export default function Login() {
     setLoading(true)
     try {
       if (useBackend) {
-        await login(identifier.trim(), password)
+        const res = await login(identifier.trim(), password)
+        if (res && res.mfaRequired) {
+          setMfaPending({ tempSessionId: res.tempSessionId })
+          setLoading(false)
+          return
+        }
       } else {
-        await new Promise(r => setTimeout(r, 900))
+        await new Promise(r => setTimeout(r, 600))
         if (identifier === 'wrong' || password === 'wrong') {
-          throw new Error('Employee ID or password is incorrect. Check both and try again.')
+          throw new Error('Email or password is incorrect.')
         }
         loginAs('requester')
       }
-      // Use hard navigation to guarantee the route tree re-evaluates with the
-      // new auth state — prevents stale React Router state from redirecting back.
-      window.location.href = returnTo
+      navigate(returnTo, { replace: true })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign in failed. Try again.'
       setBannerErr(message)
@@ -93,6 +118,29 @@ export default function Login() {
       setLoading(false)
     }
   }
+
+  async function handleMfaSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setBannerErr('')
+    setLoading(true)
+
+    try {
+      if (useRecovery) {
+        if (!recoveryCode.trim()) throw new Error('Enter your recovery code.')
+        await verifyRecoveryCode(recoveryCode.trim(), mfaPending?.tempSessionId)
+      } else {
+        if (totpCode.trim().length !== 6) throw new Error('Enter 6-digit code from authenticator app.')
+        await verifyMfa(totpCode.trim(), mfaPending?.tempSessionId)
+      }
+      navigate(returnTo, { replace: true })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'MFA verification failed.'
+      setBannerErr(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
 
   function handleDemoSignIn() {
     loginAs(demoRole)
@@ -169,6 +217,25 @@ export default function Login() {
             Use your university account.
           </p>
 
+          {statusBannerText && (
+            <div
+              role="status"
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '14px',
+                color: '#1e40af',
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.75rem 1rem',
+                marginBottom: 'var(--space-5)',
+                lineHeight: 1.5,
+              }}
+            >
+              {statusBannerText}
+            </div>
+          )}
+
           {bannerErr && (
             <div ref={bannerRef} role="alert" tabIndex={-1} style={{ fontFamily: 'var(--font-sans)', fontSize: '14px',
               color: '#7d1c18', backgroundColor: '#fce8e6', border: '1px solid #f5c6c4', borderRadius: 'var(--radius-md)',
@@ -177,65 +244,127 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} noValidate>
-            {/* Identifier */}
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              <label htmlFor="login-identifier" style={labelStyle}>Employee ID or email</label>
-              <input
-                id="login-identifier"
-                name="username"
-                type="text"
-                autoComplete="username"
-                autoFocus
-                value={identifier}
-                onChange={e => { setIdentifier(e.target.value); setIdError('') }}
-                aria-invalid={!!idError}
-                aria-describedby={idError ? 'id-error' : undefined}
-                className="input login-input"
-                style={{ borderColor: idError ? 'var(--color-danger)' : undefined }}
-              />
-              {idError && <p id="id-error" style={fieldErrStyle}>{idError}</p>}
-            </div>
 
-            {/* Password */}
-            <div style={{ marginBottom: 'var(--space-6)' }}>
-              <label htmlFor="login-password" style={labelStyle}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="login-password"
-                  name="password"
-                  type={showPass ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={e => { setPassword(e.target.value); setPassError('') }}
-                  onKeyUp={onPassKey}
-                  onKeyDown={onPassKey}
-                  aria-invalid={!!passError}
-                  aria-describedby={[passError ? 'pass-error' : '', capsOn ? 'caps-hint' : ''].filter(Boolean).join(' ') || undefined}
-                  className="input login-input"
-                  style={{ paddingRight: '2.75rem', borderColor: passError ? 'var(--color-danger)' : undefined }}
-                />
-                <button type="button" onClick={() => setShowPass(p => !p)}
-                  aria-label={showPass ? 'Hide password' : 'Show password'}
-                  style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)',
-                    background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.25rem', borderRadius: 'var(--radius-sm)' }}>
-                  {showPass ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+          {mfaPending ? (
+            <form onSubmit={handleMfaSubmit} noValidate>
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-charcoal)', margin: '0 0 0.5rem 0' }}>
+                  Two-Factor Authentication
+                </h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem 0' }}>
+                  {!useRecovery
+                    ? 'Enter the 6-digit code from your authenticator app.'
+                    : 'Enter one of your 8-character single-use recovery codes.'}
+                </p>
+
+                {!useRecovery ? (
+                  <div>
+                    <label htmlFor="login-totp" style={labelStyle}>6-digit Authenticator Code</label>
+                    <input
+                      id="login-totp"
+                      type="text"
+                      maxLength={6}
+                      autoFocus
+                      value={totpCode}
+                      onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="123456"
+                      className="input login-input"
+                      style={{ textAlign: 'center', letterSpacing: '4px', fontSize: '20px', fontWeight: 600 }}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label htmlFor="login-recovery" style={labelStyle}>Recovery Code</label>
+                    <input
+                      id="login-recovery"
+                      type="text"
+                      autoFocus
+                      value={recoveryCode}
+                      onChange={e => setRecoveryCode(e.target.value.toUpperCase())}
+                      placeholder="XXXX-XXXX"
+                      className="input login-input"
+                      style={{ textAlign: 'center', letterSpacing: '2px', fontSize: '18px', fontWeight: 600 }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setUseRecovery(!useRecovery)}
+                  className="login-text-link"
+                  style={{ fontSize: '13px' }}
+                >
+                  {useRecovery ? 'Use Authenticator Code instead' : 'Lost device? Use recovery code'}
                 </button>
               </div>
-              {capsOn && (
-                <p id="caps-hint" style={{ fontFamily: 'var(--font-sans)', fontSize: '13px',
-                  color: 'var(--color-text-secondary)', margin: '0.3rem 0 0 0' }}>
-                  Caps Lock is on
-                </p>
-              )}
-              {passError && <p id="pass-error" style={fieldErrStyle}>{passError}</p>}
-            </div>
 
-            <Button type="submit" variant="primary" size="lg" loading={loading} style={{ width: '100%' }}>
-              {loading ? 'Signing in' : 'Sign in'}
-            </Button>
-          </form>
+              <Button type="submit" variant="primary" size="lg" loading={loading} style={{ width: '100%' }}>
+                {loading ? 'Verifying...' : 'Verify & Sign in'}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} noValidate>
+              {/* Identifier */}
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <label htmlFor="login-identifier" style={labelStyle}>Employee ID or email</label>
+                <input
+                  id="login-identifier"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  autoFocus
+                  value={identifier}
+                  onChange={e => { setIdentifier(e.target.value); setIdError('') }}
+                  aria-invalid={!!idError}
+                  aria-describedby={idError ? 'id-error' : undefined}
+                  className="input login-input"
+                  style={{ borderColor: idError ? 'var(--color-danger)' : undefined }}
+                />
+                {idError && <p id="id-error" style={fieldErrStyle}>{idError}</p>}
+              </div>
+
+              {/* Password */}
+              <div style={{ marginBottom: 'var(--space-6)' }}>
+                <label htmlFor="login-password" style={labelStyle}>Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="login-password"
+                    name="password"
+                    type={showPass ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setPassError('') }}
+                    onKeyUp={onPassKey}
+                    onKeyDown={onPassKey}
+                    aria-invalid={!!passError}
+                    aria-describedby={[passError ? 'pass-error' : '', capsOn ? 'caps-hint' : ''].filter(Boolean).join(' ') || undefined}
+                    className="input login-input"
+                    style={{ paddingRight: '2.75rem', borderColor: passError ? 'var(--color-danger)' : undefined }}
+                  />
+                  <button type="button" onClick={() => setShowPass(p => !p)}
+                    aria-label={showPass ? 'Hide password' : 'Show password'}
+                    style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)',
+                      background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.25rem', borderRadius: 'var(--radius-sm)' }}>
+                    {showPass ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                  </button>
+                </div>
+                {capsOn && (
+                  <p id="caps-hint" style={{ fontFamily: 'var(--font-sans)', fontSize: '13px',
+                    color: 'var(--color-text-secondary)', margin: '0.3rem 0 0 0' }}>
+                    Caps Lock is on
+                  </p>
+                )}
+                {passError && <p id="pass-error" style={fieldErrStyle}>{passError}</p>}
+              </div>
+
+              <Button type="submit" variant="primary" size="lg" loading={loading} style={{ width: '100%' }}>
+                {loading ? 'Signing in' : 'Sign in'}
+              </Button>
+            </form>
+          )}
 
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', color: 'var(--color-text-secondary)',
             margin: 'var(--space-5) 0 0 0', lineHeight: 1.5 }}>

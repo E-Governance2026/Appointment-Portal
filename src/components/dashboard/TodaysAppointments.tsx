@@ -127,8 +127,8 @@ export default function TodaysAppointments() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="ta-table-wrap" style={{ overflow: 'hidden' }}>
-            <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }} aria-label="Today's appointments">
+          <div className="ta-table-wrap" style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '680px', tableLayout: 'fixed', borderCollapse: 'collapse' }} aria-label="Today's appointments">
               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
               <thead>
                 <tr>
@@ -189,7 +189,7 @@ export default function TodaysAppointments() {
                 </div>
                 <RequestedBy apt={apt} />
                 <TypeAuthority apt={apt} />
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-1)' }}>
                   <div style={{ width: '120px' }}>
                     <ActionButton apt={apt} canReview={canReview} onOpen={() => open(apt.id)} />
                   </div>
@@ -199,7 +199,7 @@ export default function TodaysAppointments() {
           </div>
 
           {/* Footer */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
             gap: 'var(--space-2)', padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--color-sage)' }}>
             <p className="tnum" style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
               Showing {sorted.length} of {sorted.length} appointments today
@@ -212,8 +212,10 @@ export default function TodaysAppointments() {
       <style>{`
         .ta-row:hover { background-color: var(--color-cream); }
         @media (max-width: 767px) {
-          .ta-table-wrap { display: none; }
+          .ta-table-wrap { display: none !important; }
           .ta-cards { display: flex !important; }
+          .ta-skeleton-desktop { display: none !important; }
+          .ta-skeleton-mobile { display: flex !important; }
         }
       `}</style>
     </div>
@@ -223,18 +225,36 @@ export default function TodaysAppointments() {
 // ─── Skeleton (reserves table height so nothing shifts) ───────────────────────
 function TableSkeleton() {
   return (
-    <div style={{ padding: 'var(--space-2) 0' }}>
-      {[0, 1, 2, 3, 4].map(i => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', height: '72px', padding: '0 var(--space-4)',
-          borderTop: i > 0 ? '1px solid var(--color-sage)' : 'none' }} aria-hidden="true">
-          <Skeleton width={52} height={14} />
-          <Skeleton width={36} height={36} radius="50%" />
-          <Skeleton width="30%" height={14} />
-          <Skeleton width="20%" height={14} />
-          <Skeleton width={72} height={20} radius="6px" />
-          <Skeleton width={72} height={36} radius="var(--radius-md)" style={{ marginLeft: 'auto' }} />
-        </div>
-      ))}
+    <div>
+      {/* Desktop table skeleton */}
+      <div className="ta-skeleton-desktop" style={{ padding: 'var(--space-2) 0' }}>
+        {[0, 1, 2, 3, 4].map(i => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', height: '72px', padding: '0 var(--space-4)',
+            borderTop: i > 0 ? '1px solid var(--color-sage)' : 'none' }} aria-hidden="true">
+            <Skeleton width={52} height={14} />
+            <Skeleton width={36} height={36} radius="50%" />
+            <Skeleton width="30%" height={14} />
+            <Skeleton width="20%" height={14} />
+            <Skeleton width={72} height={20} radius="6px" />
+            <Skeleton width={72} height={36} radius="var(--radius-md)" style={{ marginLeft: 'auto' }} />
+          </div>
+        ))}
+      </div>
+      {/* Mobile card skeleton */}
+      <div className="ta-skeleton-mobile" style={{ display: 'none', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)' }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-3)', border: '1px solid var(--color-sage)', borderRadius: 'var(--radius-md)' }} aria-hidden="true">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Skeleton width={60} height={16} />
+              <Skeleton width={70} height={20} radius="6px" />
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+              <Skeleton width={32} height={32} radius="50%" />
+              <Skeleton width="60%" height={14} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

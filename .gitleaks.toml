@@ -1,0 +1,43 @@
+# Gitleaks Configuration for Appointment Portal
+title = "Appointment Portal Secret Scanning Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global Allowlist"
+paths = [
+  '''^\.env\.example$''',
+  '''^backend/\.env\.example$''',
+  '''node_modules/''',
+  '''dist/''',
+  '''package-lock\.json$''',
+  '''backend/package-lock\.json$''',
+  '''src/data/.*\.ts$''',
+  '''src/seed/.*\.ts$''',
+  '''backend/src/seed/.*\.ts$''',
+]
+regexes = [
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  '''your-service-role-key''',
+  '''your-anon-key''',
+]
+
+[[rules]]
+id = "supabase-service-key"
+description = "Supabase Service Role Secret Key"
+regex = '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+'''
+secretGroup = 0
+keywords = ["supabase", "service_role"]
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic High-Entropy Secret Key"
+regex = '''(?i)(?:key|api_key|secret|token|password)\s*[:=]\s*['\"][0-9a-zA-Z-_]{24,}['\"]'''
+secretGroup = 0
+
+[[rules]]
+id = "rsa-private-key"
+description = "RSA Private Key"
+regex = '''-----BEGIN (?:RSA )?PRIVATE KEY-----'''
+secretGroup = 0

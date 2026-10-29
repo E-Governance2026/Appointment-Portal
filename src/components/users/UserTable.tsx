@@ -1,12 +1,15 @@
-import { Pencil, Trash2, Power } from 'lucide-react'
+import { Pencil, Trash2, Power, KeyRound, Lock, ShieldAlert } from 'lucide-react'
 import type { ManagedUser } from '../../data/userData'
 import { ROLE_LABELS } from '../../config/permissions'
 
 interface UserTableProps {
-  rows:       ManagedUser[]
-  onEdit:     (u: ManagedUser) => void
-  onToggle:   (u: ManagedUser) => void
-  onDelete:   (u: ManagedUser) => void
+  rows:             ManagedUser[]
+  onEdit:           (u: ManagedUser) => void
+  onToggle:         (u: ManagedUser) => void
+  onDelete:         (u: ManagedUser) => void
+  onResetPassword?: (u: ManagedUser) => void
+  onUnlock?:        (u: ManagedUser) => void
+  onResetMfa?:      (u: ManagedUser) => void
 }
 
 function RoleChip({ role }: { role: ManagedUser['role'] }) {
@@ -33,7 +36,10 @@ function ActiveTag({ active }: { active: boolean }) {
 }
 
 // ─── UserTable ────────────────────────────────────────────────────────────────
-export default function UserTable({ rows, onEdit, onToggle, onDelete }: UserTableProps) {
+export default function UserTable({
+  rows, onEdit, onToggle, onDelete,
+  onResetPassword, onUnlock, onResetMfa,
+}: UserTableProps) {
   if (rows.length === 0) {
     return (
       <div style={{ padding: '2.5rem', textAlign: 'center', fontFamily: 'var(--font-sans)',
@@ -68,16 +74,34 @@ export default function UserTable({ rows, onEdit, onToggle, onDelete }: UserTabl
               <td style={td}><ActiveTag active={u.active} /></td>
               <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                 <button onClick={() => onEdit(u)} aria-label={`Edit ${u.name}`} className="btn-secondary"
-                  style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px' }}>
+                  title="Edit user" style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px' }}>
                   <Pencil size={14} aria-hidden="true" />
                 </button>
+                {onResetPassword && (
+                  <button onClick={() => onResetPassword(u)} aria-label={`Reset password for ${u.name}`} className="btn-secondary"
+                    title="Reset password" style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px', color: '#B45309' }}>
+                    <KeyRound size={14} aria-hidden="true" />
+                  </button>
+                )}
+                {onUnlock && (
+                  <button onClick={() => onUnlock(u)} aria-label={`Unlock account for ${u.name}`} className="btn-secondary"
+                    title="Unlock account" style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px', color: '#2563EB' }}>
+                    <Lock size={14} aria-hidden="true" />
+                  </button>
+                )}
+                {onResetMfa && (
+                  <button onClick={() => onResetMfa(u)} aria-label={`Reset MFA for ${u.name}`} className="btn-secondary"
+                    title="Reset two-factor authentication" style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px', color: '#7C3AED' }}>
+                    <ShieldAlert size={14} aria-hidden="true" />
+                  </button>
+                )}
                 <button onClick={() => onToggle(u)} aria-label={u.active ? `Deactivate ${u.name}` : `Activate ${u.name}`}
-                  className="btn-secondary" style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px',
+                  className="btn-secondary" title={u.active ? 'Deactivate user' : 'Activate user'} style={{ padding: '0.35rem', fontSize: '13px', marginRight: '6px',
                     color: u.active ? 'var(--color-text-secondary)' : 'var(--color-emerald)' }}>
                   <Power size={14} aria-hidden="true" />
                 </button>
                 <button onClick={() => onDelete(u)} aria-label={`Delete ${u.name}`} className="btn-secondary"
-                  style={{ padding: '0.35rem', fontSize: '13px', color: 'var(--color-danger)' }}>
+                  title="Delete user" style={{ padding: '0.35rem', fontSize: '13px', color: 'var(--color-danger)' }}>
                   <Trash2 size={14} aria-hidden="true" />
                 </button>
               </td>

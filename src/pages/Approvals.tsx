@@ -126,16 +126,8 @@ export default function Approvals() {
       </div>
 
       {/* Split layout: queue (left) + detail (right when a row is selected) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: selectedId ? 'minmax(0, 1fr) minmax(0, 420px)' : '1fr',
-          gap: '1rem',
-          alignItems: 'start',
-        }}
-        className="approvals-split"
-      >
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className={`approvals-split ${selectedId ? 'has-selected' : ''}`}>
+        <div className="card" style={{ padding: 0, overflow: 'hidden', minWidth: 0 }}>
           {isLoading ? (
             <div style={emptyStyle}>Loading requests...</div>
           ) : isError ? (
@@ -155,11 +147,36 @@ export default function Approvals() {
         </div>
 
         {selectedId && (
-          <div style={{ position: 'sticky', top: '1rem', height: 'calc(100vh - 8rem)' }}>
+          <div className="approvals-detail-col">
             <ApprovalDetailPanel id={selectedId} onClose={() => setSelectedId(null)} />
           </div>
         )}
       </div>
+
+      <style>{`
+        .approvals-split {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 1rem;
+          align-items: start;
+          width: 100%;
+          min-width: 0;
+        }
+        .approvals-detail-col {
+          min-width: 0;
+          width: 100%;
+        }
+        @media (min-width: 1024px) {
+          .approvals-split.has-selected {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+          }
+          .approvals-detail-col {
+            position: sticky;
+            top: 1rem;
+            height: calc(100vh - 8rem);
+          }
+        }
+      `}</style>
     </div>
   )
 }

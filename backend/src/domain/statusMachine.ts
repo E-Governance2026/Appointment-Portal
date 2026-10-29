@@ -42,10 +42,33 @@ const TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   'not-reported':   [],
 }
 
-/** True if moving from → to is legal. Same-status is never legal. */
-export function canTransition(from: AppointmentStatus, to: AppointmentStatus): boolean {
+/** True if moving from -> to is legal. When role is provided, checks if the role is permitted to trigger the transition. */
+export function canTransition(from: AppointmentStatus, to: AppointmentStatus, role?: string): boolean {
   if (from === to) return false
-  return TRANSITIONS[from]?.includes(to) ?? false
+  const transitionAllowed = TRANSITIONS[from]?.includes(to) ?? false
+  if (!transitionAllowed) return false
+  if (!role) return true
+
+  // Role-based restrictions
+  if (role === 'requester') {
+    // Requesters can only submit, provide info, respond to reschedule, or cancel
+    const allowedForRequester = (
+      (from === 'draft' && to === 'submitted') ||
+      (from === 'additional-info' && to === 'submitted') ||
+      (from === 'rescheduled' && (to === 'confirmed' || to === 'cancelled')) ||
+      (['submitted', 'approved', 'confirmed'].includes(from) && to === 'cancelled')
+    )
+    return allowedForRequester
+  }
+
+  if (role === 'coordinator_authority') {
+    // Coordinators cannot complete (check-out) or mark not-reported (reception desk actions)
+    if (to === 'completed' || to === 'not-reported') return false
+    return true
+  }
+
+  // admin_dispatcher and super_admin can perform all valid transitions
+  return true
 }
 
 /** The statuses `from` may legally move to. */
@@ -54,9 +77,9 @@ export function allowedNextStatuses(from: AppointmentStatus): AppointmentStatus[
 }
 
 /** Throws a descriptive Error if the transition is illegal. */
-export function assertTransition(from: AppointmentStatus, to: AppointmentStatus): void {
-  if (!canTransition(from, to)) {
-    throw new Error(`Illegal status transition: "${from}" cannot move to "${to}".`)
+export function assertTransition(from: AppointmentStatus, to: AppointmentStatus, role?: string): void {
+  if (!canTransition(from, to, role)) {
+    throw new Error(`Illegal status transition: "${from}" cannot move to "${to}"${role ? ` for role "${role}"` : ''}.`)
   }
 }
 

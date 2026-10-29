@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest --run",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:security": "npm --prefix backend run test:security && vitest run src/tests/authHarden.test.tsx src/tests/sessionManager.test.tsx",
+    "security:scan": "npx tsx scripts/security-scan.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

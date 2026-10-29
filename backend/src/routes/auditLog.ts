@@ -80,6 +80,8 @@ export const AUDIT_COLUMNS =
   'id, appointment_id, action, actor_id, actor_name, actor_role, summary, ' +
   'detail, from_status, to_status, visible_to_requester, timestamp'
 
+import { recordAuditEvent } from '../lib/auditTrail.js'
+
 /** Append one audit event. Returns the created row id (or throws on error). */
 export async function appendEvent(supabase: SupabaseClient, input: AppendEventInput): Promise<void> {
   const { error } = await supabase.from('audit_events').insert({
@@ -95,6 +97,18 @@ export async function appendEvent(supabase: SupabaseClient, input: AppendEventIn
     visible_to_requester: input.visibleToRequester ?? true,
   })
   if (error) throw new Error(`audit append failed: ${error.message}`)
+
+  // Record cryptographic audit trail entry with hash chaining
+  await recordAuditEvent({
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    action: input.action,
+    entityType: 'appointment',
+    entityId: input.appointmentId,
+    outcome: 'success',
+    before: input.fromStatus ? { status: input.fromStatus } : null,
+    after: input.toStatus ? { status: input.toStatus, summary: input.summary } : { summary: input.summary },
+  }).catch(() => {})
 }
 
 /** Map a DB row to the frontend AuditEvent contract. */

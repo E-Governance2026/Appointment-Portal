@@ -49,15 +49,21 @@ export const userCreateSchema = z.object({
   department: z.string().trim().optional().default(''),
   role:       roleEnum,
   active:     z.boolean().optional().default(true),
-})
+}).strict()
 
-export const userUpdateSchema = userCreateSchema.extend({
-  id: z.string().min(1),
-})
+export const userUpdateSchema = z.object({
+  id:         z.string().min(1),
+  name:       z.string().trim().min(1, 'Name is required.'),
+  email:      z.string().trim().email('A valid email is required.'),
+  employeeId: z.string().trim().optional().default(''),
+  department: z.string().trim().optional().default(''),
+  role:       roleEnum,
+  active:     z.boolean().optional().default(true),
+}).strict()
 
 export const activeSchema = z.object({
   active: z.boolean(),
-})
+}).strict()
 
 // Count active super admins among the given rows, optionally excluding one id.
 // Used by the last-super-admin guards.

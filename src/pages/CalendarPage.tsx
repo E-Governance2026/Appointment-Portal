@@ -113,20 +113,19 @@ export default function CalendarPage() {
       )}
 
       {tab === 'calendar' ? (
-        <div
-          style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 380px)', gap: '1rem', alignItems: 'start' }}
-          className="calendar-split"
-        >
-          <MonthCalendar
-            viewDate={viewDate}
-            selectedDate={selectedDate}
-            appointments={monthAppointments}
-            availability={availability}
-            onSelectDate={setSelectedDate}
-            onPrevMonth={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
-            onNextMonth={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-          />
-          <div style={{ position: 'sticky', top: '1rem', height: 'calc(100vh - 8rem)' }}>
+        <div className="calendar-split">
+          <div style={{ minWidth: 0 }}>
+            <MonthCalendar
+              viewDate={viewDate}
+              selectedDate={selectedDate}
+              appointments={monthAppointments}
+              availability={availability}
+              onSelectDate={setSelectedDate}
+              onPrevMonth={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+              onNextMonth={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            />
+          </div>
+          <div className="calendar-schedule-col">
             <DaySchedule
               date={selectedDate}
               appointments={dayAppointments}
@@ -138,6 +137,31 @@ export default function CalendarPage() {
       ) : (
         <AvailabilityEditor authorityId={authorityId} authorityName={authorityName} />
       )}
+
+      <style>{`
+        .calendar-split {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 1rem;
+          align-items: start;
+          width: 100%;
+          min-width: 0;
+        }
+        .calendar-schedule-col {
+          min-width: 0;
+          width: 100%;
+        }
+        @media (min-width: 1024px) {
+          .calendar-split {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+          }
+          .calendar-schedule-col {
+            position: sticky;
+            top: 1rem;
+            height: calc(100vh - 8rem);
+          }
+        }
+      `}</style>
     </div>
   )
 }

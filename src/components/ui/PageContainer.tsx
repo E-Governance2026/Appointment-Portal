@@ -14,7 +14,15 @@ export default function PageContainer({ children }: PageContainerProps) {
           width: 100%;
           max-width: 1440px;
           margin: 0 auto;
-          padding: var(--space-6) var(--space-6);
+          box-sizing: border-box;
+          min-width: 0;
+          padding: var(--space-4) var(--space-3);
+        }
+        @media (min-width: 480px) {
+          .page-container { padding: var(--space-4) var(--space-4); }
+        }
+        @media (min-width: 640px) {
+          .page-container { padding: var(--space-5) var(--space-6); }
         }
         @media (min-width: 768px) {
           .page-container { padding: var(--space-6) var(--space-8); }

@@ -87,7 +87,10 @@ export const APPOINTMENT_COLUMNS =
  * the UI's ApprovalRecord uses empty strings for an open slot (not null). An
  * optional camelCase field is omitted when its column is null.
  */
-export function toAppointmentDto(row: AppointmentRow): AppointmentDto {
+export function toAppointmentDto(
+  row: AppointmentRow,
+  options?: { includeMeetingUrl?: boolean },
+): AppointmentDto {
   const dto: AppointmentDto = {
     id:                row.id,
     requester:         row.requester,
@@ -104,7 +107,7 @@ export function toAppointmentDto(row: AppointmentRow): AppointmentDto {
     subject:           row.subject ?? '',
     description:       row.description ?? '',
     mode:              row.mode,
-    locationLabel:     row.location_label ?? '',
+    locationLabel:     (row.location_label && row.location_label.startsWith('http') && !options?.includeMeetingUrl) ? '' : (row.location_label ?? ''),
     documentsCount:    row.documents_count ?? 0,
     status:            row.status,
     submittedAt:       row.submitted_at,
@@ -120,7 +123,7 @@ export function toAppointmentDto(row: AppointmentRow): AppointmentDto {
   if (row.proposed_time)  dto.proposedTime  = row.proposed_time
   if (row.checked_in_at)  dto.checkedInAt   = row.checked_in_at
   if (row.checked_out_at) dto.checkedOutAt  = row.checked_out_at
-  if (row.mode === 'online') {
+  if (options?.includeMeetingUrl && row.mode === 'online') {
     dto.meetingUrl = (row.location_label && row.location_label.startsWith('http'))
       ? row.location_label
       : generateGoogleMeetLink(row.id)

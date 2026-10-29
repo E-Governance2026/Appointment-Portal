@@ -75,7 +75,10 @@ Demo accounts (password `Portal@2026`):
 - `npm run dev` — start with hot reload (tsx watch)
 - `npm run build` — compile TypeScript to `dist/`
 - `npm start` — run the compiled server (`node dist/server.js`)
-- `npm test` — run the Vitest suite
+- `npm test` — run the full Vitest suite (16 test files)
+- `npm run test:security` — run security hardening tests (auth, authz, session, security)
+- `npm run scan:secrets` — scan repository for leaked credentials and unignored `.env`
+- `npm run security:scan` — run unified audit (npm audit, gitleaks, license compliance)
 
 Operational / verification scripts (run with `npx tsx src/scripts/<name>.ts`):
 

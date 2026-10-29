@@ -96,11 +96,11 @@ export const availabilityBodySchema = z.object({
     enabled: z.boolean(),
     start:   z.string().regex(timeRe, 'Use HH:MM.'),
     end:     z.string().regex(timeRe, 'Use HH:MM.'),
-  })).length(7, 'Provide all seven weekdays.'),
+  }).strict()).length(7, 'Provide all seven weekdays.'),
   holidays: z.array(z.object({
     date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.'),
     label: z.string().trim().min(1, 'A holiday needs a label.'),
-  })),
-})
+  }).strict()),
+}).strict()
 
 export type AvailabilityBody = z.infer<typeof availabilityBodySchema>

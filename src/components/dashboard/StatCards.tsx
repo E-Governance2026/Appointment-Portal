@@ -29,9 +29,23 @@ function Grid({ children }: { children: React.ReactNode }) {
     <div className="stat-grid">
       {children}
       <style>{`
-        .stat-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
-        @media (min-width: 640px)  { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (min-width: 1024px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: var(--space-3);
+          width: 100%;
+          box-sizing: border-box;
+          min-width: 0;
+        }
+        @media (max-width: 360px) {
+          .stat-grid { grid-template-columns: 1fr; }
+        }
+        @media (min-width: 640px)  {
+          .stat-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+        }
+        @media (min-width: 1024px) {
+          .stat-grid { grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+        }
       `}</style>
     </div>
   )
@@ -57,9 +71,10 @@ export default function StatCards() {
 
   if (isError) {
     return (
-      <div role="alert" style={{ padding: 'var(--space-5)', backgroundColor: '#fce8e6',
+      <div role="alert" style={{ padding: 'var(--space-4)', backgroundColor: '#fce8e6',
         border: '1px solid #f5c6c4', borderRadius: 'var(--radius-lg)',
-        fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: '#7d1c18' }}>
+        fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: '#7d1c18',
+        width: '100%', boxSizing: 'border-box', wordBreak: 'break-word' }}>
         Could not load statistics. Refresh the page to try again.
       </div>
     )

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
@@ -7,21 +7,13 @@ import { AUTHORITIES, MOCK_REQUESTER, canBook } from '../data/bookingSeeds'
 import { submitAppointment, type BookingDraft } from '../data/bookingApi'
 import AccessDenied from './AccessDenied'
 import TimeSlotPicker from '../components/common/TimeSlotPicker'
+import { useSessionManager } from '../components/session/SessionManager'
+import { api } from '../services/apiClient'
 
 // ─── Revised booking flow (per department) ────────────────────────────────────
-// Three steps, no appointment-type selection:
-//   1. Appointment with  — pick a department, then an authority.
-//   2. Date and time     — optional; the authority proposes a time if left blank.
-//   3. Reason            — a short subject + a description, then save.
-// The draft is built here and sent through the existing submit boundary so the
-// data layer, confirmation page and approvals workflow are unchanged.
-
 const STEP_LABELS = ['Appointment with', 'Date and time', 'Reason'] as const
 const STEP_COUNT = STEP_LABELS.length
 
-// The three fixed options a requester can book with. "Department" is a general
-// request to the department; the other two are specific authorities. Each maps
-// to a real authority record so the submit boundary is unchanged.
 interface BookWithOption {
   key:          string
   label:        string
@@ -51,6 +43,7 @@ function todayISO(): string {
 
 export default function BookAppointmentNew() {
   const navigate = useNavigate()
+  const { registerDraftAutosave } = useSessionManager()
 
   if (!canBook(MOCK_REQUESTER.role)) return <AccessDenied />
 
@@ -65,11 +58,64 @@ export default function BookAppointmentNew() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [draftRestored, setDraftRestored] = useState(false)
   const idempotencyKey = useRef(crypto.randomUUID())
+
+  // Check if form has unsaved modifications
+  const isDirty = Boolean(optionKey || date || time || subject || description)
+
+  // Passive autosave function — never extends server session idle timer
+  const saveDraftPassive = useCallback(async () => {
+    try {
+      await api.post('/appointments/draft', {
+        draft: { optionKey, date, time, subject, description, mode, step },
+      }, { passive: true })
+    } catch { /* best effort */ }
+  }, [optionKey, date, time, subject, description, mode, step])
+
+  // 1. Autosave when warning dialog opens if form has unsaved changes
+  useEffect(() => {
+    return registerDraftAutosave(() => {
+      if (isDirty) {
+        return saveDraftPassive()
+      }
+    })
+  }, [registerDraftAutosave, isDirty, saveDraftPassive])
+
+  // 2. Autosave every 20 seconds while the form is dirty
+  useEffect(() => {
+    if (!isDirty) return
+    const interval = setInterval(() => {
+      saveDraftPassive()
+    }, 20_000)
+    return () => clearInterval(interval)
+  }, [isDirty, saveDraftPassive])
+
+  // 3. Resume draft on mount (e.g. after login redirect with next)
+  useEffect(() => {
+    let mounted = true
+    api.get<{ draft?: { optionKey?: string; date?: string; time?: string; subject?: string; description?: string; mode?: 'physical' | 'online'; step?: number } | null }>('/appointments/draft')
+      .then(res => {
+        if (!mounted || !res?.draft) return
+        const d = res.draft
+        if (d.optionKey || d.subject || d.description || d.date) {
+          if (d.optionKey) setOptionKey(d.optionKey)
+          if (d.date) setDate(d.date)
+          if (d.time) setTime(d.time)
+          if (d.subject) setSubject(d.subject)
+          if (d.description) setDescription(d.description)
+          if (d.mode) setMode(d.mode)
+          if (d.step && d.step >= 1 && d.step <= STEP_COUNT) setStep(d.step)
+          setDraftRestored(true)
+        }
+      })
+      .catch(() => { /* ok */ })
+
+    return () => { mounted = false }
+  }, [])
 
   const selectedOption = BOOK_WITH_OPTIONS.find(o => o.key === optionKey)
   const authority = AUTHORITIES.find(a => a.id === selectedOption?.authorityId)
-  // Who the appointment is with, for display copy.
   const withLabel = selectedOption?.label ?? 'the authority'
 
   function validate(current: number): boolean {
@@ -78,7 +124,6 @@ export default function BookAppointmentNew() {
       if (!optionKey) e.option = 'Select who the appointment is with.'
     }
     if (current === 2) {
-      // Optional, but if one is set the other must be too.
       if (date && !time) e.time = 'Select a time, or clear the date to let the authority propose one.'
       if (time && !date) e.date = 'Select a date, or clear the time to let the authority propose one.'
     }
@@ -106,8 +151,6 @@ export default function BookAppointmentNew() {
     setSubmitError('')
     setSubmitting(true)
 
-    // Derive a type from the authority (type selection was removed from the
-    // requester flow); fall back to 'general'. purpose/mode/docs are defaults.
     const typeId = authority.typeIds[0] ?? 'general'
     const draft: BookingDraft = {
       id: 'new',
@@ -131,6 +174,8 @@ export default function BookAppointmentNew() {
 
     try {
       const record = await submitAppointment(draft, idempotencyKey.current)
+      // Clear autosaved draft on submission
+      api.del('/appointments/draft', { passive: true }).catch(() => { /* ok */ })
       navigate(`/book/confirmation/${record.id}`, { replace: true })
     } catch (err: unknown) {
       const apiErr = err as { message?: string }
@@ -142,6 +187,27 @@ export default function BookAppointmentNew() {
   return (
     <div style={{ maxWidth: '720px' }}>
       <PageHeader title="Book appointment" description={`Step ${step} of ${STEP_COUNT}: ${STEP_LABELS[step - 1]}`} />
+
+      {/* Draft restoration banner */}
+      {draftRestored && (
+        <div
+          role="status"
+          style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: '14px',
+            color: '#166534',
+            backgroundColor: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.75rem 1rem',
+            marginBottom: 'var(--space-4)',
+            lineHeight: 1.5,
+          }}
+        >
+          Your draft was restored.
+        </div>
+      )}
+
 
       {/* Stepper */}
       <ol style={{ display: 'flex', gap: 'var(--space-2)', listStyle: 'none', margin: '0 0 var(--space-6) 0', padding: 0, flexWrap: 'wrap' }}>

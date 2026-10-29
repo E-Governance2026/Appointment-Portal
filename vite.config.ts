@@ -7,9 +7,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    sourcemap: false,
+  },
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/tests/setup.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'backend/**'],
   },
 })

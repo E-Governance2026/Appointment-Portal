@@ -13,10 +13,11 @@ export type Role =
 // The acting user the API trusts, resolved from a verified token. This is the
 // same shape the frontend service layer passes as `Actor`.
 export interface Actor {
-  id:    string      // app users.id (e.g. 'u-sup')
-  name:  string
-  role:  Role
-  email: string
+  id:          string      // app users.id (e.g. 'u-sup')
+  name:        string
+  role:        Role
+  email:       string
+  department?: string
 }
 
 // Augment Express Request so routes can read req.actor after requireAuth.
@@ -25,6 +26,10 @@ declare global {
   namespace Express {
     interface Request {
       actor?: Actor
+      sessionId?: string
+      session?: import('./lib/sessionStore.js').SessionEntry
+      requestId?: string
     }
   }
 }
+

@@ -1,4 +1,5 @@
 import { X, CalendarPlus, Video, ExternalLink, Clock, Bell } from 'lucide-react'
+import { safeHref, isSafeUrl } from '../../utils/safeUrl'
 
 interface MeetingTimingModalProps {
   relativeText: string
@@ -213,9 +214,9 @@ export default function MeetingTimingModal({
 
           {/* Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {calendarUrl && (
+            {calendarUrl && isSafeUrl(calendarUrl) && (
               <a
-                href={calendarUrl}
+                href={safeHref(calendarUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

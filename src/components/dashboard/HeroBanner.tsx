@@ -67,27 +67,14 @@ export default function HeroBanner() {
   const nextPerson = role === 'requester' ? nextApt?.authority : nextApt?.requester
 
   return (
-    <div
-      style={{
-        backgroundColor: 'var(--color-forest)',
-        borderRadius: 'var(--radius-xl)',
-        minHeight: '128px',
-        padding: '28px 32px',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 'var(--space-6)',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}
-    >
+    <div className="hero-banner">
       {/* Left */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+      <div className="hero-content">
         <p className="tnum" style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)',
           color: 'rgb(255 255 255 / 0.7)', margin: 0 }}>
           {longDate()}
         </p>
-        <h1 style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 'var(--text-4xl)',
-          lineHeight: 'var(--text-4xl-lh)', color: '#ffffff', margin: 0, textWrap: 'balance' }}>
+        <h1 className="hero-title">
           {greeting()}, {firstNameOf(user?.name ?? '')}
         </h1>
         {statsLoading ? (
@@ -101,19 +88,7 @@ export default function HeroBanner() {
       </div>
 
       {/* Right: next appointment card */}
-      <div
-        style={{
-          flexShrink: 0,
-          minWidth: '280px',
-          backgroundColor: 'var(--color-ivory)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--color-sage)',
-          padding: 'var(--space-4)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
-        }}
-      >
+      <div className="hero-next-card">
         <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)',
           color: 'var(--color-text-secondary)', margin: 0 }}>
           Next appointment
@@ -145,6 +120,66 @@ export default function HeroBanner() {
           </p>
         )}
       </div>
+
+      <style>{`
+        .hero-banner {
+          background-color: var(--color-forest);
+          border-radius: var(--radius-xl);
+          min-height: 128px;
+          padding: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: var(--space-4);
+          width: 100%;
+          box-sizing: border-box;
+          min-width: 0;
+        }
+        .hero-content {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+        }
+        .hero-title {
+          font-family: var(--font-serif);
+          font-weight: 600;
+          font-size: clamp(1.4rem, 4.5vw, var(--text-4xl));
+          line-height: 1.25;
+          color: #ffffff;
+          margin: 0;
+          text-wrap: balance;
+          word-break: break-word;
+        }
+        .hero-next-card {
+          width: 100%;
+          min-width: 0;
+          background-color: var(--color-ivory);
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--color-sage);
+          padding: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+          box-sizing: border-box;
+        }
+        @media (min-width: 768px) {
+          .hero-banner {
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            padding: 28px 32px;
+            gap: var(--space-6);
+          }
+          .hero-next-card {
+            width: auto;
+            min-width: 280px;
+            max-width: 340px;
+            flex-shrink: 0;
+          }
+        }
+      `}</style>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { X, CalendarPlus, ExternalLink, Mail, CheckCircle2, Video } from 'lucide-react'
+import { safeHref, isSafeUrl } from '../../utils/safeUrl'
 import type { SentEmail } from '../../services/emailService'
 
 interface EmailPreviewModalProps {
@@ -257,48 +258,52 @@ export default function EmailPreviewModal({ email, onClose }: EmailPreviewModalP
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
-                <a
-                  href={email.meetingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
-                    backgroundColor: '#16A34A',
-                    color: '#FFFFFF',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                  }}
-                >
-                  <Video size={14} /> Join Google Meet <ExternalLink size={12} />
-                </a>
+                {email.meetingUrl && isSafeUrl(email.meetingUrl) && (
+                  <a
+                    href={safeHref(email.meetingUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      backgroundColor: '#16A34A',
+                      color: '#FFFFFF',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Video size={14} /> Join Google Meet <ExternalLink size={12} />
+                  </a>
+                )}
 
-                <a
-                  href={email.calendarUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '0.5rem 0.9rem',
-                    borderRadius: '8px',
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #86EFAC',
-                    color: '#15803D',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                  }}
-                >
-                  <CalendarPlus size={14} /> Add to Google Calendar & Meet
-                </a>
+                {email.calendarUrl && isSafeUrl(email.calendarUrl) && (
+                  <a
+                    href={safeHref(email.calendarUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '0.5rem 0.9rem',
+                      borderRadius: '8px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #86EFAC',
+                      color: '#15803D',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <CalendarPlus size={14} /> Add to Google Calendar & Meet
+                  </a>
+                )}
               </div>
 
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: '#15803D', margin: 0 }}>

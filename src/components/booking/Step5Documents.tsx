@@ -4,6 +4,8 @@ import { Upload, X, FileText, AlertCircle, CheckCircle2, Plus } from 'lucide-rea
 import { fetchRequiredDocTypes, uploadDocument } from '../../data/bookingApi'
 import { useBookingStore } from '../../store/bookingStore'
 import type { DocUploadSlot } from '../../store/bookingStore'
+import { useSessionManager } from '../session/SessionManager'
+
 
 // ─── Single upload row ────────────────────────────────────────────────────────
 function UploadRow({
@@ -181,8 +183,18 @@ export default function Step5Documents() {
     }
   }, [requiredTypes, docSlots.length, initDocSlots])
 
+  const sessionMgr = (() => {
+    try {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      return useSessionManager()
+    } catch {
+      return null
+    }
+  })()
+
   async function handleFile(docTypeId: string, file: File, maxSizeMb: number, acceptedFormats: string[]) {
     updateSlot(docTypeId, { uploadStatus: 'uploading', progress: 0, error: undefined })
+    sessionMgr?.trackUpload(true)
     try {
       const doc = await uploadDocument(
         file,
@@ -194,8 +206,11 @@ export default function Step5Documents() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Upload failed. Try again.'
       updateSlot(docTypeId, { uploadStatus: 'error', error: msg })
+    } finally {
+      sessionMgr?.trackUpload(false)
     }
   }
+
 
   if (isLoading) {
     return <p style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', color: 'var(--color-text-secondary)' }}>Loading document requirements...</p>

@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/authStore'
 import { hasPermission } from '../../config/permissions'
 import { allowedNextStatuses } from '../../config/statusMachine'
 import { googleCalendarUrl } from '../../utils/calendar'
+import { safeHref } from '../../utils/safeUrl'
 import GoogleMeetCard from '../common/GoogleMeetCard'
 import { getAppointmentMeetLink } from '../../utils/googleMeet'
 import {
@@ -195,7 +196,7 @@ export default function ApprovalDetailPanel({ id, onClose }: ApprovalDetailPanel
           })
           if (!url) return null
           return (
-            <a href={url} target="_blank" rel="noopener noreferrer"
+            <a href={safeHref(url)} target="_blank" rel="noopener noreferrer"
               className="btn-secondary btn-sm"
               style={{ marginTop: '1rem', textDecoration: 'none' }}>
               <CalendarPlus size={14} aria-hidden="true" /> Add to Google Calendar

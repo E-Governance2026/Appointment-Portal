@@ -65,20 +65,27 @@ export const departmentCreateSchema = z.object({
   name:   z.string().trim().min(1, 'Department name is required.'),
   code:   z.string().trim().min(1, 'Department code is required.'),
   active: z.boolean().optional().default(true),
-})
-export const departmentUpdateSchema = departmentCreateSchema.extend({
-  id: z.string().min(1),
-})
+}).strict()
+export const departmentUpdateSchema = z.object({
+  id:     z.string().min(1),
+  name:   z.string().trim().min(1, 'Department name is required.'),
+  code:   z.string().trim().min(1, 'Department code is required.'),
+  active: z.boolean().optional().default(true),
+}).strict()
 
 export const typeCreateSchema = z.object({
   name:        z.string().trim().min(1, 'Type name is required.'),
   description: z.string().trim().optional().default(''),
   defaultDurationMinutes: z.number().int().positive('Duration must be greater than zero.'),
   active:      z.boolean().optional().default(true),
-})
-export const typeUpdateSchema = typeCreateSchema.extend({
-  id: z.string().min(1),
-})
+}).strict()
+export const typeUpdateSchema = z.object({
+  id:          z.string().min(1),
+  name:        z.string().trim().min(1, 'Type name is required.'),
+  description: z.string().trim().optional().default(''),
+  defaultDurationMinutes: z.number().int().positive('Duration must be greater than zero.'),
+  active:      z.boolean().optional().default(true),
+}).strict()
 
 export const authorityCreateSchema = z.object({
   name:        z.string().trim().min(1, 'Authority name is required.'),
@@ -86,10 +93,15 @@ export const authorityCreateSchema = z.object({
   department:  z.string().trim().min(1, 'Department is required.'),
   typeIds:     z.array(z.string()).optional().default([]),
   active:      z.boolean().optional().default(true),
-})
-export const authorityUpdateSchema = authorityCreateSchema.extend({
-  id: z.string().min(1),
-})
+}).strict()
+export const authorityUpdateSchema = z.object({
+  id:          z.string().min(1),
+  name:        z.string().trim().min(1, 'Authority name is required.'),
+  designation: z.string().trim().optional().default(''),
+  department:  z.string().trim().min(1, 'Department is required.'),
+  typeIds:     z.array(z.string()).optional().default([]),
+  active:      z.boolean().optional().default(true),
+}).strict()
 
 // Case-insensitive trimmed equality for uniqueness checks (mirrors sameName).
 export function sameName(a: string, b: string): boolean {

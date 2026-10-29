@@ -10,6 +10,7 @@ import { fetchApproval } from '../services/appointmentsService'
 import GoogleMeetCard from '../components/common/GoogleMeetCard'
 import { getAppointmentMeetLink } from '../utils/googleMeet'
 import { googleCalendarUrl } from '../utils/calendar'
+import { safeHref } from '../utils/safeUrl'
 
 // Under the real backend a single appointment is read from GET /appointments/:id.
 const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
@@ -18,23 +19,14 @@ const USE_BACKEND = import.meta.env.VITE_DATA_SOURCE === 'supabase'
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   if (!value) return null
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '140px 1fr',
-        gap: '0.5rem',
-        padding: '0.625rem 0',
-        borderBottom: '1px solid var(--color-sage)',
-        alignItems: 'flex-start',
-      }}
-    >
+    <div className="info-row">
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-secondary)', flexShrink: 0 }}>
         {icon}
         <span style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
           {label}
         </span>
       </div>
-      <span style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 500, color: 'var(--color-charcoal)' }}>
+      <span style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 500, color: 'var(--color-charcoal)', wordBreak: 'break-word' }}>
         {value}
       </span>
     </div>
@@ -106,30 +98,36 @@ export default function AppointmentDetail() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-        <button
-          onClick={() => navigate('/my-appointments')}
-          style={{
-            padding: '0.5rem',
-            borderRadius: 'var(--radius-md)',
-            border: 'none',
-            backgroundColor: 'transparent',
-            color: 'var(--color-text-secondary)',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-sage)')}
-          onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-          onFocus={e  => (e.currentTarget.style.outline = '2px solid var(--color-emerald)')}
-          onBlur={e   => (e.currentTarget.style.outline = 'none')}
-          aria-label="Back to my appointments"
-        >
-          <ArrowLeft size={18} aria-hidden="true" />
-        </button>
-        <div style={{ flex: 1 }}>
-          <h1 className="page-title">{appt.purpose}</h1>
-          <p className="page-subtitle">{appt.id}</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: '200px' }}>
+          <button
+            onClick={() => navigate('/my-appointments')}
+            style={{
+              padding: '0.5rem',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              marginTop: '2px',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-sage)')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            onFocus={e  => (e.currentTarget.style.outline = '2px solid var(--color-emerald)')}
+            onBlur={e   => (e.currentTarget.style.outline = 'none')}
+            aria-label="Back to my appointments"
+          >
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 className="page-title">{appt.purpose}</h1>
+            <p className="page-subtitle">{appt.id}</p>
+          </div>
         </div>
-        <StatusBadge status={appt.status} size="md" />
+        <div style={{ flexShrink: 0 }}>
+          <StatusBadge status={appt.status} size="md" />
+        </div>
       </div>
 
       <div
@@ -137,6 +135,8 @@ export default function AppointmentDetail() {
           display: 'grid',
           gridTemplateColumns: '1fr',
           gap: '1.25rem',
+          minWidth: 0,
+          width: '100%',
         }}
         className="detail-grid"
       >
@@ -243,7 +243,7 @@ export default function AppointmentDetail() {
               return (
                 <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-sage)' }}>
                   <a
-                    href={url}
+                    href={safeHref(url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-secondary"
@@ -403,6 +403,20 @@ export default function AppointmentDetail() {
       )}
 
       <style>{`
+        .info-row {
+          display: grid;
+          grid-template-columns: 140px 1fr;
+          gap: 0.5rem;
+          padding: 0.625rem 0;
+          border-bottom: 1px solid var(--color-sage);
+          align-items: flex-start;
+        }
+        @media (max-width: 480px) {
+          .info-row {
+            grid-template-columns: 110px 1fr;
+            gap: 0.35rem;
+          }
+        }
         @media (min-width: 1024px) {
           .detail-grid { grid-template-columns: 1fr 380px !important; }
         }

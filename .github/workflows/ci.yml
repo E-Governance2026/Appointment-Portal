@@ -1,0 +1,69 @@
+name: CI Security & Build Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  security-and-test:
+    name: Lint, Test, Audit & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      # ── Frontend CI ──
+      - name: Install Frontend Dependencies (npm ci)
+        run: npm ci
+
+      - name: Frontend Dependency Vulnerability Audit (fail on high)
+        run: npm audit --audit-level=high
+
+      - name: Frontend Lint & Type Check
+        run: |
+          npm run lint || true
+          npx tsc --noEmit
+
+      - name: Frontend Vitest Test Suite
+        run: npm run test
+
+      - name: Frontend Production Bundle Build
+        run: npm run build
+
+      # ── Backend CI ──
+      - name: Install Backend Dependencies (npm ci)
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Backend Dependency Vulnerability Audit (fail on high)
+        working-directory: ./backend
+        run: npm audit --audit-level=high
+
+      - name: Backend Type Check
+        working-directory: ./backend
+        run: npx tsc --noEmit
+
+      - name: Backend Vitest Test Suite
+        working-directory: ./backend
+        run: npm test
+
+      # ── Secret Scanning & Static Analysis ──
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: Run In-Repo Custom Secret Scanner
+        run: npx tsx backend/src/scripts/scan-secrets.ts

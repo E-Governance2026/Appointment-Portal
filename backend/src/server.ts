@@ -1,5 +1,6 @@
 import { createApp } from './app.js'
 import { env, validateEnv } from './config/env.js'
+import { assertAllRoutesDeclared } from './middleware/permission.js'
 
 // ─── Server entry ─────────────────────────────────────────────────────────────
 // Validate configuration first: in production a missing Supabase config is
@@ -7,6 +8,8 @@ import { env, validateEnv } from './config/env.js'
 validateEnv()
 
 const app = createApp()
+// Enforce Deny by Default: ensure all registered routes declare permissions or allowlist
+assertAllRoutesDeclared(app)
 
 app.listen(env.port, () => {
   // eslint-disable-next-line no-console

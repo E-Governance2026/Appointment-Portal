@@ -1,0 +1,18 @@
+# Environment and local configs
+.env
+.env.*
+!.env.example
+*.local
+
+# Dependencies and build outputs
+node_modules/
+dist/
+
+# File storage / uploads
+storage/
+uploads/
+temp/
+
+# Logs
+logs/
+*.log

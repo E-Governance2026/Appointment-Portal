@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Video, Copy, Check, ExternalLink, CalendarPlus, Clock, Mail, ShieldCheck } from 'lucide-react'
 import { googleCalendarUrl } from '../../utils/calendar'
 import { isCustomMeetLink, GOOGLE_MEET_NEW_URL, getRelativeMeetingTiming } from '../../utils/googleMeet'
+import { safeHref, isSafeUrl } from '../../utils/safeUrl'
 import EmailPreviewModal from './EmailPreviewModal'
 import MeetingTimingModal from './MeetingTimingModal'
 import { getSentEmailForAppointment } from '../../services/emailService'
@@ -74,7 +75,9 @@ export default function GoogleMeetCard({
 
   function handleJoinAnyway() {
     setShowTimingModal(false)
-    window.open(activeJoinUrl, '_blank', 'noopener,noreferrer')
+    if (isSafeUrl(activeJoinUrl)) {
+      window.open(activeJoinUrl, '_blank', 'noopener,noreferrer')
+    }
   }
 
   const calUrl = (showCalendarButton && effDate && effTime)
@@ -297,7 +300,7 @@ export default function GoogleMeetCard({
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
             <a
-              href={activeJoinUrl}
+              href={safeHref(activeJoinUrl)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleJoinClick}
@@ -324,9 +327,9 @@ export default function GoogleMeetCard({
               <ExternalLink size={12} aria-hidden="true" style={{ opacity: 0.8 }} />
             </a>
 
-            {calUrl && (
+            {calUrl && isSafeUrl(calUrl) && (
               <a
-                href={calUrl}
+                href={safeHref(calUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

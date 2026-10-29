@@ -284,7 +284,9 @@ export default function ReportFilters({
                 borderRadius: 'var(--radius-md)',
                 boxShadow: 'var(--shadow-md, 0 4px 12px rgba(0,0,0,0.1))',
                 padding: '1rem',
-                minWidth: '310px',
+                minWidth: 'min(310px, calc(100vw - 32px))',
+                maxWidth: 'calc(100vw - 32px)',
+                boxSizing: 'border-box',
               }}
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', marginBottom: '1rem' }}>
