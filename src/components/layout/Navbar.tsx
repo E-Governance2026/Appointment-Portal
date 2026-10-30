@@ -1,21 +1,37 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, Bell, ChevronDown, Menu, User, KeyRound, LogOut,
-  CheckCheck, Calendar, Clock, AlertCircle,
+  CheckCheck, Calendar, Clock, AlertCircle, XCircle,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { ROLE_LABELS } from '../../config/permissions'
 import IconButton from '../ui/IconButton'
 import Avatar from '../ui/Avatar'
+import {
+  fetchUserNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  type InAppNotification,
+} from '../../services/notificationService'
 
-// ─── Mock notifications (unchanged data) ──────────────────────────────────────
-const mockNotifications = [
-  { id: 1, title: 'Appointment approved',       message: 'Your appointment with Dr. Amit Patel has been approved.', time: '5 min ago',  read: false, icon: <CheckCheck size={14} />,   color: 'var(--color-emerald)' },
-  { id: 2, title: 'Appointment reminder',       message: 'Meeting with Registrar at 10:30 AM today.',                time: '30 min ago', read: false, icon: <Clock size={14} />,        color: 'var(--color-info)' },
-  { id: 3, title: 'New appointment request',    message: 'Rohan Mehta has requested an appointment with you.',       time: '1 hr ago',   read: false, icon: <Calendar size={14} />,     color: 'var(--color-emerald)' },
-  { id: 4, title: 'Approval pending',           message: 'Your appointment request is awaiting admin approval.',     time: '2 hrs ago',  read: true,  icon: <AlertCircle size={14} />,  color: 'var(--color-amber)' },
-]
+function getNotificationVisuals(type: InAppNotification['type']) {
+  switch (type) {
+    case 'approved':
+    case 'confirmed':
+      return { icon: <CheckCheck size={14} />, color: 'var(--color-emerald)' }
+    case 'reminder':
+      return { icon: <Clock size={14} />, color: 'var(--color-info)' }
+    case 'info':
+      return { icon: <AlertCircle size={14} />, color: 'var(--color-amber)' }
+    case 'cancelled':
+    case 'rejected':
+      return { icon: <XCircle size={14} />, color: 'var(--color-danger)' }
+    case 'submitted':
+    default:
+      return { icon: <Calendar size={14} />, color: 'var(--color-emerald)' }
+  }
+}
 
 interface NavbarProps {
   onMenuClick: () => void
@@ -31,7 +47,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const [searchValue, setSearchValue] = useState('')
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [notifications, setNotifications] = useState(mockNotifications)
+  const [notifications, setNotifications] = useState<InAppNotification[]>([])
 
   const notifRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -43,6 +59,32 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
     navigate('/login', { replace: true })
   }
 
+  const refreshNotifications = useCallback(async () => {
+    if (!user) {
+      setNotifications([])
+      return
+    }
+    try {
+      const items = await fetchUserNotifications(user)
+      setNotifications(items)
+    } catch {
+      setNotifications([])
+    }
+  }, [user?.id, user?.role, user?.name])
+
+  useEffect(() => {
+    refreshNotifications()
+    const interval = setInterval(refreshNotifications, 20_000)
+    const handleUpdate = () => { refreshNotifications() }
+    window.addEventListener('portal_appointments_updated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('portal_appointments_updated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [refreshNotifications])
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false)
@@ -52,8 +94,22 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  const markRead = (id: number) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+  const markAllRead = () => {
+    if (!user) return
+    markAllNotificationsAsRead(user.id, notifications.map(n => n.id))
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  const handleNotificationClick = (n: InAppNotification) => {
+    if (user) {
+      markNotificationAsRead(user.id, n.id)
+      setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item))
+    }
+    if (n.appointmentId) {
+      setNotifOpen(false)
+      navigate(`/appointments/${n.appointmentId}`)
+    }
+  }
 
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const mobileSearchInputRef = useRef<HTMLInputElement>(null)
@@ -151,29 +207,75 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                   )}
                 </div>
                 <div style={{ maxHeight: '288px', overflowY: 'auto' }}>
-                  {notifications.map(n => (
-                    <button key={n.id} onClick={() => markRead(n.id)}
-                      style={{ width: '100%', display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start',
-                        padding: '12px 16px', textAlign: 'left', border: 'none', cursor: 'pointer',
-                        borderBottom: '1px solid var(--color-sage)',
-                        backgroundColor: n.read ? 'transparent' : 'rgb(15 128 107 / 0.04)' }}
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-cream)')}
-                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = n.read ? 'transparent' : 'rgb(15 128 107 / 0.04)')}>
-                      <div aria-hidden="true" style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px',
-                        backgroundColor: 'var(--color-sage)', color: n.color }}>
-                        {n.icon}
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          width: '36px', height: '36px', borderRadius: '50%',
+                          backgroundColor: 'var(--color-sage)',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--color-text-secondary)', marginBottom: '8px',
+                        }}
+                      >
+                        <Bell size={18} />
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600,
-                          color: 'var(--color-charcoal)', margin: 0 }}>{n.title}</p>
-                        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)',
-                          color: 'var(--color-text-secondary)', margin: '2px 0 0 0', lineHeight: 1.4 }}>{n.message}</p>
-                        <p className="tnum" style={{ fontFamily: 'var(--font-sans)', fontSize: '11px',
-                          color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>{n.time}</p>
-                      </div>
-                    </button>
-                  ))}
+                      <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-charcoal)', margin: 0 }}>
+                        No notifications
+                      </p>
+                      <p style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0', lineHeight: 1.4 }}>
+                        You're all caught up. Updates on your appointments will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    notifications.map(n => {
+                      const visuals = getNotificationVisuals(n.type)
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          style={{
+                            width: '100%', display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start',
+                            padding: '12px 16px', textAlign: 'left', border: 'none', cursor: 'pointer',
+                            borderBottom: '1px solid var(--color-sage)',
+                            backgroundColor: n.read ? 'transparent' : 'rgb(15 128 107 / 0.04)',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-cream)')}
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = n.read ? 'transparent' : 'rgb(15 128 107 / 0.04)')}
+                        >
+                          <div
+                            aria-hidden="true"
+                            style={{
+                              width: '28px', height: '28px', borderRadius: 'var(--radius-sm)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px',
+                              backgroundColor: 'var(--color-sage)', color: visuals.color,
+                            }}
+                          >
+                            {visuals.icon}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600,
+                                color: 'var(--color-charcoal)', margin: 0 }}>{n.title}</p>
+                              {!n.read && (
+                                <span
+                                  style={{
+                                    width: '6px', height: '6px', borderRadius: '50%',
+                                    backgroundColor: 'var(--color-emerald)', flexShrink: 0,
+                                  }}
+                                  aria-label="Unread"
+                                />
+                              )}
+                            </div>
+                            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)',
+                              color: 'var(--color-text-secondary)', margin: '2px 0 0 0', lineHeight: 1.4 }}>{n.message}</p>
+                            <p className="tnum" style={{ fontFamily: 'var(--font-sans)', fontSize: '11px',
+                              color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>{n.time}</p>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
                 </div>
               </div>
             )}

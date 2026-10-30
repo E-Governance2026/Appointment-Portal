@@ -17,6 +17,7 @@ import { dashboardRouter } from './routes/dashboard.js'
 import { trackRouter } from './routes/track.js'
 import { settingsRouter } from './routes/settings.js'
 import { auditViewerRouter } from './routes/auditViewer.js'
+import { notificationsRouter } from './routes/notifications.js'
 import { sessionMiddleware } from './middleware/session.js'
 import { sessionSecurityPolicyGuard } from './middleware/recentAuth.js'
 import './types.js'   // load the Express.Request augmentation
@@ -159,6 +160,8 @@ export function createApp() {
   app.use('/api/settings',     sessionMiddleware(), settingsRouter)
   app.use('/audit',            sessionMiddleware(), auditViewerRouter)
   app.use('/api/audit',        sessionMiddleware(), auditViewerRouter)
+  app.use('/notifications',     sessionMiddleware(), notificationsRouter)
+  app.use('/api/notifications', sessionMiddleware(), notificationsRouter)
 
   // Public appointment tracking: GET /track/:id (no auth)
   app.use('/track', trackRouter)
