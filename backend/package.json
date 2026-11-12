@@ -14,7 +14,7 @@
     "security:scan": "npm --prefix .. run security:scan"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
+    "@supabase/supabase-js": "^2.119.0",
     "argon2": "^0.45.1",
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
